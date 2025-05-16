@@ -8,19 +8,6 @@ import DevCycle
 import Foundation
 import OpenFeature
 
-// Protocol for DevCycleClient used for dependency injection and testing.
-// Only includes the subset of methods needed by DevCycleProvider.
-public protocol DevCycleClientProtocol: AnyObject {
-    func variable(key: String, defaultValue: Bool) -> DVCVariable<Bool>
-    func variable(key: String, defaultValue: String) -> DVCVariable<String>
-    func variable(key: String, defaultValue: Double) -> DVCVariable<Double>
-    func variable(key: String, defaultValue: [String: Any]) -> DVCVariable<[String: Any]>
-    func identifyUser(user: DevCycleUser, callback: ((Error?, [String: Variable]?) -> Void)?) throws
-}
-
-// Make DevCycleClient conform to the protocol
-extension DevCycleClient: DevCycleClientProtocol {}
-
 public struct DevCycleProviderMetadata: ProviderMetadata {
     public var name: String? = "DevCycle Provider"
 }
@@ -91,7 +78,7 @@ public final class DevCycleProvider: FeatureProvider {
             // Otherwise, convert context to user and throw any errors
             let user: DevCycleUser
             if let context = initialContext {
-                user = try dvcUserFromContext(context)
+                user = try DevCycleProvider.dvcUserFromContext(context)
             } else {
                 user = try DevCycleUser.builder().userId("anonymous").build()
             }
@@ -133,7 +120,7 @@ public final class DevCycleProvider: FeatureProvider {
                 return
             }
 
-            let user = try dvcUserFromContext(newContext)
+            let user = try DevCycleProvider.dvcUserFromContext(newContext)
 
             // Mark provider as stale while context is being updated
             eventHandler.send(.stale)
@@ -306,11 +293,12 @@ public final class DevCycleProvider: FeatureProvider {
             )
         }
 
-        let dictionaryValue = convertValueToDictionary(defaultValue)
+        let dictionaryValue = DevCycleProvider.convertValueToDictionary(defaultValue)
         let variable = devcycleClient!.variable(key: key, defaultValue: dictionaryValue)
 
         return ProviderEvaluation(
-            value: variable.isDefaulted ? defaultValue : convertDictionaryToValue(variable.value),
+            value: variable.isDefaulted
+                ? defaultValue : DevCycleProvider.convertDictionaryToValue(variable.value),
             reason: variable.isDefaulted
                 ? Reason.defaultReason.rawValue : Reason.targetingMatch.rawValue
         )
@@ -352,7 +340,7 @@ public final class DevCycleProvider: FeatureProvider {
         - Parameter value: The Value to convert
         - Returns: The converted Dictionary
      */
-    internal func convertValueToDictionary(_ value: Value) -> [String: Any] {
+    internal static func convertValueToDictionary(_ value: Value) -> [String: Any] {
         var dictionaryValue: [String: Any] = [:]
 
         // Convert Value to Dictionary if possible
@@ -385,7 +373,7 @@ public final class DevCycleProvider: FeatureProvider {
         - Parameter dictionary: The dictionary to convert
         - Returns: The converted Value
      */
-    internal func convertDictionaryToValue(_ dictionary: [String: Any]) -> Value {
+    internal static func convertDictionaryToValue(_ dictionary: [String: Any]) -> Value {
         var attributes: [String: Value] = [:]
 
         for (key, value) in dictionary {
@@ -395,8 +383,10 @@ public final class DevCycleProvider: FeatureProvider {
                 attributes[key] = .boolean(boolValue)
             } else if let numberValue = value as? Double {
                 attributes[key] = .double(numberValue)  // Use .double for numeric values
+            } else if let numberValue = value as? Int64 {
+                attributes[key] = .integer(numberValue)
             } else if let numberValue = value as? Int {
-                attributes[key] = .double(Double(numberValue))  // Convert Int to Double and use .double
+                attributes[key] = .integer(Int64(numberValue))
             } else if let nestedDict = value as? [String: Any] {
                 if let structValue = convertDictionaryToValue(nestedDict).asStructure() {
                     attributes[key] = .structure(structValue)
@@ -417,7 +407,7 @@ public final class DevCycleProvider: FeatureProvider {
         - Parameter context: The evaluation context
         - Returns: The DevCycle user
      */
-    internal func dvcUserFromContext(_ context: EvaluationContext) throws -> DevCycleUser {
+    internal static func dvcUserFromContext(_ context: EvaluationContext) throws -> DevCycleUser {
         // Extract attributes from context
         let attributes = unwrapValues(context.asMap())
 
@@ -503,7 +493,7 @@ public final class DevCycleProvider: FeatureProvider {
         return user
     }
 
-    internal func unwrapValues(_ map: [String: Value]) -> [String: Any] {
+    internal static func unwrapValues(_ map: [String: Value]) -> [String: Any] {
         var result: [String: Any] = [:]
         for (key, value) in map {
             switch value {
@@ -518,7 +508,7 @@ public final class DevCycleProvider: FeatureProvider {
         return result
     }
 
-    internal func isFlatJsonValue(_ value: Any) -> Bool {
+    internal static func isFlatJsonValue(_ value: Any) -> Bool {
         value is String || value is Int || value is Double || value is Bool || value is NSNull
             || value is NSNumber
     }
@@ -528,7 +518,7 @@ public final class DevCycleProvider: FeatureProvider {
         - Parameter data: Dictionary to convert
         - Returns: Dictionary with valid custom data values
      */
-    internal func convertToDVCCustomData(_ data: [String: Any]) -> [String: Any] {
+    internal static func convertToDVCCustomData(_ data: [String: Any]) -> [String: Any] {
         var customData: [String: Any] = [:]
         for (key, value) in data {
             if isFlatJsonValue(value) {

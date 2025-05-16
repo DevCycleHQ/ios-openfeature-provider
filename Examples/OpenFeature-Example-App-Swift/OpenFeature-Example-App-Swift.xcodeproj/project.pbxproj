@@ -10,6 +10,7 @@
 		0F223B832DD6866900BA3C2B /* DevCycle in Frameworks */ = {isa = PBXBuildFile; productRef = 0F223B822DD6866900BA3C2B /* DevCycle */; };
 		0F223B852DD6866900BA3C2B /* DevCycleOpenFeatureProvider in Frameworks */ = {isa = PBXBuildFile; productRef = 0F223B842DD6866900BA3C2B /* DevCycleOpenFeatureProvider */; };
 		0F223B9A2DD78EF700BA3C2B /* DevCycleOpenFeatureProvider in Frameworks */ = {isa = PBXBuildFile; productRef = 0F223B992DD78EF700BA3C2B /* DevCycleOpenFeatureProvider */; };
+		0F6180312DD7C7E400F6DE29 /* DevCycleOpenFeatureProvider in Frameworks */ = {isa = PBXBuildFile; productRef = 0F6180302DD7C7E400F6DE29 /* DevCycleOpenFeatureProvider */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +47,7 @@
 				0F223B832DD6866900BA3C2B /* DevCycle in Frameworks */,
 				0F223B852DD6866900BA3C2B /* DevCycleOpenFeatureProvider in Frameworks */,
 				0F223B9A2DD78EF700BA3C2B /* DevCycleOpenFeatureProvider in Frameworks */,
+				0F6180312DD7C7E400F6DE29 /* DevCycleOpenFeatureProvider in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +93,7 @@
 				0F223B822DD6866900BA3C2B /* DevCycle */,
 				0F223B842DD6866900BA3C2B /* DevCycleOpenFeatureProvider */,
 				0F223B992DD78EF700BA3C2B /* DevCycleOpenFeatureProvider */,
+				0F6180302DD7C7E400F6DE29 /* DevCycleOpenFeatureProvider */,
 			);
 			productName = "DevCycle-iOS-OpenFeature-Example-App-Swift";
 			productReference = 0F7789192DCE9A41009E8E7E /* DevCycle-iOS-OpenFeature-Example-App-Swift.app */;
@@ -121,7 +124,7 @@
 			mainGroup = 0F7789102DCE9A41009E8E7E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				0F223B982DD78EF700BA3C2B /* XCLocalSwiftPackageReference "../../../ios-openfeature-provider" */,
+				0F61802F2DD7C7E400F6DE29 /* XCLocalSwiftPackageReference "../../../ios-openfeature-provider" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0F77891A2DCE9A41009E8E7E /* Products */;
@@ -353,7 +356,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		0F223B982DD78EF700BA3C2B /* XCLocalSwiftPackageReference "../../../ios-openfeature-provider" */ = {
+		0F61802F2DD7C7E400F6DE29 /* XCLocalSwiftPackageReference "../../../ios-openfeature-provider" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../../../ios-openfeature-provider";
 		};
@@ -369,6 +372,10 @@
 			productName = DevCycleOpenFeatureProvider;
 		};
 		0F223B992DD78EF700BA3C2B /* DevCycleOpenFeatureProvider */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DevCycleOpenFeatureProvider;
+		};
+		0F6180302DD7C7E400F6DE29 /* DevCycleOpenFeatureProvider */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DevCycleOpenFeatureProvider;
 		};
