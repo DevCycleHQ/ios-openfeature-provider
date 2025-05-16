@@ -5,86 +5,22 @@ import XCTest
 
 @testable import DevCycleOpenFeatureProvider
 
-class DVCVariableMock<T> {
-    var key: String
-    var value: T
-    var defaultValue: T
-    var isDefaulted: Bool
-    var evalReason: String?
-
-    init(
-        key: String, value: T, defaultValue: T, isDefaulted: Bool = true,
-        evalReason: String? = nil
-    ) {
-        self.key = key
-        self.value = value
-        self.defaultValue = defaultValue
-        self.isDefaulted = isDefaulted
-        self.evalReason = evalReason
-    }
-}
-
-class MockDevCycleClient: DevCycleClientProtocol {
-    var mockVariableValue: [String: Any] = [:]
-    var mockIsDefaulted: Bool = true
-    var mockEvalReason: String? = nil
-
-    func variable(key: String, defaultValue: [String: Any]) -> DVCVariable<[String: Any]> {
-        return DVCVariable(
-            key: key,
-            value: mockVariableValue,
-            defaultValue: defaultValue,
-            evalReason: mockEvalReason
-        )
-    }
-    func variable(key: String, defaultValue: Bool) -> DVCVariable<Bool> {
-        return DVCVariable(
-            key: key,
-            value: defaultValue,
-            defaultValue: defaultValue,
-            evalReason: nil
-        )
-    }
-    func variable(key: String, defaultValue: String) -> DVCVariable<String> {
-        return DVCVariable(
-            key: key,
-            value: defaultValue,
-            defaultValue: defaultValue,
-            evalReason: nil
-        )
-    }
-    func variable(key: String, defaultValue: Double) -> DVCVariable<Double> {
-        return DVCVariable(
-            key: key,
-            value: defaultValue,
-            defaultValue: defaultValue,
-            evalReason: nil
-        )
-    }
-    func identifyUser(user: DevCycleUser, callback: ((Error?, [String: Variable]?) -> Void)?) throws
-    {
-        // No-op for mock
-    }
-}
-
 final class DevCycleProviderTests: XCTestCase {
 
     private var sdkKey: String!
     private var provider: DevCycleProvider!
     private var cancellables: Set<AnyCancellable>!
+    private var mockClient: MockDevCycleClient!
 
     override func setUp() async throws {
         sdkKey = "dev_mobile-test-sdk-key"
         provider = DevCycleProvider(sdkKey: sdkKey)
         cancellables = []
 
-        // let context = MutableContext(targetingKey: "test-user")
-        // try await provider.initialize(initialContext: context)
-
         // Inject mock client
-        let mockClient = MockDevCycleClient()
+        mockClient = MockDevCycleClient()
+        mockClient.shouldDefault = true
         provider.devcycleClient = mockClient
-        // (provider as AnyObject).setValue(mockClient, forKey: "devcycleClient")
     }
 
     override func tearDown() async throws {
@@ -97,7 +33,6 @@ final class DevCycleProviderTests: XCTestCase {
     func testProviderInitialization() {
         XCTAssertEqual(provider.metadata.name, "DevCycle Provider")
         XCTAssertTrue(provider.hooks.isEmpty)
-        XCTAssertNil(provider.devcycleClient)
     }
 
     func testProviderWithOptions() {
@@ -188,6 +123,8 @@ final class DevCycleProviderTests: XCTestCase {
     // MARK: - Object Evaluation Tests
 
     func testObjectEvaluation() throws {
+        mockClient.shouldDefault = false
+
         // Test object evaluation with a complex structure
         let defaultValue = Value.structure([
             "name": .string("John"),
@@ -201,7 +138,7 @@ final class DevCycleProviderTests: XCTestCase {
         let result = try provider.getObjectEvaluation(
             key: "test-object", defaultValue: defaultValue, context: nil as EvaluationContext?)
 
-        XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(result.reason, Reason.targetingMatch.rawValue)
 
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["name"], .string("John"))
@@ -219,6 +156,8 @@ final class DevCycleProviderTests: XCTestCase {
     }
 
     func testComplexObjectEvaluation() throws {
+        mockClient.shouldDefault = false
+
         // Test object evaluation with mixed types
         let defaultValue = Value.structure([
             "string": .string("text"),
@@ -233,7 +172,7 @@ final class DevCycleProviderTests: XCTestCase {
             context: nil as EvaluationContext?
         )
 
-        XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(result.reason, Reason.targetingMatch.rawValue)
 
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["string"], .string("text"))
@@ -258,13 +197,13 @@ final class DevCycleProviderTests: XCTestCase {
             "double": 45.67,
         ]
 
-        let result = provider.convertDictionaryToValue(dictionary)
+        let result = DevCycleProvider.convertDictionaryToValue(dictionary)
 
         // Validate the result
         if case .structure(let attributes) = result {
             XCTAssertEqual(attributes["string"], .string("hello world"))
             XCTAssertEqual(attributes["boolean"], .boolean(true))
-            XCTAssertEqual(attributes["integer"], .double(123.0))  // Note: integers are converted to doubles
+            XCTAssertEqual(attributes["integer"], .integer(123))
             XCTAssertEqual(attributes["double"], .double(45.67))
         } else {
             XCTFail("Expected structure value")
@@ -285,7 +224,7 @@ final class DevCycleProviderTests: XCTestCase {
             ],
         ]
 
-        let result = provider.convertDictionaryToValue(dictionary)
+        let result = DevCycleProvider.convertDictionaryToValue(dictionary)
 
         // Validate the result
         if case .structure(let attributes) = result {
@@ -318,7 +257,7 @@ final class DevCycleProviderTests: XCTestCase {
             "arrayKey": ["item1", "item2", "item3"],
         ]
 
-        let result = provider.convertDictionaryToValue(dictionary)
+        let result = DevCycleProvider.convertDictionaryToValue(dictionary)
 
         // Only the normal key should be present, array should be skipped
         if case .structure(let attributes) = result {
@@ -336,7 +275,7 @@ final class DevCycleProviderTests: XCTestCase {
             "nullKey": NSNull(),
         ]
 
-        let result = provider.convertDictionaryToValue(dictionary)
+        let result = DevCycleProvider.convertDictionaryToValue(dictionary)
 
         // Only the normal key should be present
         if case .structure(let attributes) = result {
@@ -358,14 +297,14 @@ final class DevCycleProviderTests: XCTestCase {
             "emptyDict": [String: Any](),
         ]
 
-        let result = provider.convertDictionaryToValue(dictionary)
+        let result = DevCycleProvider.convertDictionaryToValue(dictionary)
 
         // Verify edge cases are handled correctly
         if case .structure(let attributes) = result {
             XCTAssertEqual(attributes["emptyString"], .string(""))
-            XCTAssertEqual(attributes["zero"], .double(0))
+            XCTAssertEqual(attributes["zero"], .integer(0))
             XCTAssertEqual(attributes["negativeNumber"], .double(-99.99))
-            XCTAssertEqual(attributes["maxInt"], .double(Double(Int.max)))
+            XCTAssertEqual(attributes["maxInt"], .integer(Int64(Int.max)))
 
             // Verify empty dictionary becomes empty structure
             if case .structure(let emptyStruct) = attributes["emptyDict"] {
@@ -400,7 +339,7 @@ final class DevCycleProviderTests: XCTestCase {
         )
 
         // Now we can actually call the method directly
-        let user = try provider.dvcUserFromContext(context)
+        let user = try DevCycleProvider.dvcUserFromContext(context)
 
         // Verify all properties were set correctly
         XCTAssertEqual(user.userId, "test-user-id")
@@ -445,7 +384,7 @@ final class DevCycleProviderTests: XCTestCase {
         let context = MutableContext(targetingKey: "user-123")
 
         // Convert to DevCycleUser
-        let user = try provider.dvcUserFromContext(context)
+        let user = try DevCycleProvider.dvcUserFromContext(context)
 
         // Verify basic user properties
         XCTAssertEqual(user.userId, "user-123")
@@ -468,7 +407,7 @@ final class DevCycleProviderTests: XCTestCase {
         )
 
         // Convert to DevCycleUser
-        let user = try provider.dvcUserFromContext(context)
+        let user = try DevCycleProvider.dvcUserFromContext(context)
 
         // Verify all properties were set correctly
         XCTAssertEqual(user.userId, "user-456")
@@ -497,7 +436,7 @@ final class DevCycleProviderTests: XCTestCase {
         )
 
         // Convert to DevCycleUser
-        let user = try provider.dvcUserFromContext(context)
+        let user = try DevCycleProvider.dvcUserFromContext(context)
 
         // Verify user ID
         XCTAssertEqual(user.userId, "user-combined")
@@ -560,7 +499,7 @@ final class DevCycleProviderTests: XCTestCase {
         )
 
         // Convert to DevCycleUser
-        let user = try provider.dvcUserFromContext(context)
+        let user = try DevCycleProvider.dvcUserFromContext(context)
 
         // Verify standard properties
         XCTAssertEqual(user.userId, "user-flat")
@@ -602,7 +541,7 @@ final class DevCycleProviderTests: XCTestCase {
         )
 
         // Convert to DevCycleUser - should not throw
-        let user = try provider.dvcUserFromContext(context)
+        let user = try DevCycleProvider.dvcUserFromContext(context)
 
         // Email should be nil since we provided an invalid type
         XCTAssertEqual(user.userId, "user-invalid")
@@ -617,7 +556,7 @@ final class DevCycleProviderTests: XCTestCase {
         let context = MutableContext(targetingKey: "")
 
         // Converting should throw
-        XCTAssertThrowsError(try provider.dvcUserFromContext(context)) { error in
+        XCTAssertThrowsError(try DevCycleProvider.dvcUserFromContext(context)) { error in
             XCTAssertEqual(error as? OpenFeatureError, OpenFeatureError.targetingKeyMissingError)
         }
     }
@@ -633,7 +572,7 @@ final class DevCycleProviderTests: XCTestCase {
             ])
         )
 
-        let user1 = try provider.dvcUserFromContext(context1)
+        let user1 = try DevCycleProvider.dvcUserFromContext(context1)
         XCTAssertEqual(user1.userId, "alt-user-1")
 
         // Test userId field
@@ -644,7 +583,7 @@ final class DevCycleProviderTests: XCTestCase {
             ])
         )
 
-        let user2 = try provider.dvcUserFromContext(context2)
+        let user2 = try DevCycleProvider.dvcUserFromContext(context2)
         XCTAssertEqual(user2.userId, "alt-user-2")
 
         // Test targeting key has priority
@@ -655,7 +594,7 @@ final class DevCycleProviderTests: XCTestCase {
             ])
         )
 
-        let user3 = try provider.dvcUserFromContext(context3)
+        let user3 = try DevCycleProvider.dvcUserFromContext(context3)
         XCTAssertEqual(user3.userId, "primary-id")
     }
 
@@ -675,7 +614,7 @@ final class DevCycleProviderTests: XCTestCase {
         ]
 
         // Unwrap the values to Swift native types
-        let unwrapped = provider.unwrapValues(valueMap)
+        let unwrapped = DevCycleProvider.unwrapValues(valueMap)
 
         // Verify all values were unwrapped correctly
         XCTAssertEqual(unwrapped["string"] as? String, "text value")
@@ -698,7 +637,7 @@ final class DevCycleProviderTests: XCTestCase {
             "emptyStruct": .structure([:])
         ]
 
-        let unwrapped = provider.unwrapValues(emptyMap)
+        let unwrapped = DevCycleProvider.unwrapValues(emptyMap)
 
         // Verify the empty structure becomes an empty dictionary
         if let emptyDict = unwrapped["emptyStruct"] as? [String: Any] {
@@ -713,23 +652,29 @@ final class DevCycleProviderTests: XCTestCase {
     func testIsFlatJsonValue() {
         // Test supported flat JSON value types
         XCTAssertTrue(
-            provider.isFlatJsonValue("string value"), "String should be a flat JSON value")
-        XCTAssertTrue(provider.isFlatJsonValue(42), "Int should be a flat JSON value")
-        XCTAssertTrue(provider.isFlatJsonValue(123.456), "Double should be a flat JSON value")
-        XCTAssertTrue(provider.isFlatJsonValue(true), "Bool should be a flat JSON value")
-        XCTAssertTrue(provider.isFlatJsonValue(NSNull()), "NSNull should be a flat JSON value")
+            DevCycleProvider.isFlatJsonValue("string value"), "String should be a flat JSON value")
+        XCTAssertTrue(DevCycleProvider.isFlatJsonValue(42), "Int should be a flat JSON value")
         XCTAssertTrue(
-            provider.isFlatJsonValue(NSNumber(value: 42)), "NSNumber should be a flat JSON value")
+            DevCycleProvider.isFlatJsonValue(123.456), "Double should be a flat JSON value")
+        XCTAssertTrue(DevCycleProvider.isFlatJsonValue(true), "Bool should be a flat JSON value")
+        XCTAssertTrue(
+            DevCycleProvider.isFlatJsonValue(NSNull()), "NSNull should be a flat JSON value")
+        XCTAssertTrue(
+            DevCycleProvider.isFlatJsonValue(NSNumber(value: 42)),
+            "NSNumber should be a flat JSON value")
 
         // Test unsupported value types (not flat JSON values)
         XCTAssertFalse(
-            provider.isFlatJsonValue(["array", "item"]), "Array should not be a flat JSON value")
+            DevCycleProvider.isFlatJsonValue(["array", "item"]),
+            "Array should not be a flat JSON value")
         XCTAssertFalse(
-            provider.isFlatJsonValue(["key": "value"]), "Dictionary should not be a flat JSON value"
+            DevCycleProvider.isFlatJsonValue(["key": "value"]),
+            "Dictionary should not be a flat JSON value"
         )
-        XCTAssertFalse(provider.isFlatJsonValue(Date()), "Date should not be a flat JSON value")
         XCTAssertFalse(
-            provider.isFlatJsonValue(URL(string: "https://example.com")!),
+            DevCycleProvider.isFlatJsonValue(Date()), "Date should not be a flat JSON value")
+        XCTAssertFalse(
+            DevCycleProvider.isFlatJsonValue(URL(string: "https://example.com")!),
             "URL should not be a flat JSON value")
     }
 
@@ -746,7 +691,7 @@ final class DevCycleProviderTests: XCTestCase {
         ]
 
         // Convert to DVC custom data
-        let customData = provider.convertToDVCCustomData(validData)
+        let customData = DevCycleProvider.convertToDVCCustomData(validData)
 
         // Verify all values were preserved
         XCTAssertEqual(customData.count, 5, "Should have 5 entries")
@@ -770,7 +715,7 @@ final class DevCycleProviderTests: XCTestCase {
         ]
 
         // Convert to DVC custom data
-        let customData = provider.convertToDVCCustomData(mixedData)
+        let customData = DevCycleProvider.convertToDVCCustomData(mixedData)
 
         // Verify only valid values were included
         XCTAssertEqual(customData.count, 4, "Should have 4 entries (only valid ones)")
@@ -790,7 +735,7 @@ final class DevCycleProviderTests: XCTestCase {
         let emptyData: [String: Any] = [:]
 
         // Convert to DVC custom data
-        let customData = provider.convertToDVCCustomData(emptyData)
+        let customData = DevCycleProvider.convertToDVCCustomData(emptyData)
 
         // Verify result is empty
         XCTAssertTrue(customData.isEmpty, "Result should be empty")
@@ -808,7 +753,7 @@ final class DevCycleProviderTests: XCTestCase {
         ]
 
         // Convert to DVC custom data
-        let customData = provider.convertToDVCCustomData(edgeCaseData)
+        let customData = DevCycleProvider.convertToDVCCustomData(edgeCaseData)
 
         // Verify all edge cases were handled correctly
         XCTAssertEqual(customData.count, 6, "Should have 6 entries")
@@ -831,7 +776,7 @@ final class DevCycleProviderTests: XCTestCase {
             "double": .double(45.67),
         ])
 
-        let result = provider.convertValueToDictionary(value)
+        let result = DevCycleProvider.convertValueToDictionary(value)
 
         // Validate the result
         XCTAssertEqual(result.count, 4, "Should have 4 entries")
@@ -855,7 +800,7 @@ final class DevCycleProviderTests: XCTestCase {
             ]),
         ])
 
-        let result = provider.convertValueToDictionary(value)
+        let result = DevCycleProvider.convertValueToDictionary(value)
 
         // Validate the result
         XCTAssertEqual(result.count, 2, "Should have 2 top-level entries")
@@ -887,7 +832,7 @@ final class DevCycleProviderTests: XCTestCase {
             "unsupportedKey": .list([.string("item1"), .string("item2")]),
         ])
 
-        let result = provider.convertValueToDictionary(value)
+        let result = DevCycleProvider.convertValueToDictionary(value)
 
         // Only the normal key should be present, unsupported type should be skipped
         XCTAssertEqual(result.count, 1, "Should have 1 entry")
@@ -899,7 +844,7 @@ final class DevCycleProviderTests: XCTestCase {
         // Test with empty structure
         let value = Value.structure([:])
 
-        let result = provider.convertValueToDictionary(value)
+        let result = DevCycleProvider.convertValueToDictionary(value)
 
         // Verify result is empty
         XCTAssertTrue(result.isEmpty, "Result should be empty")
@@ -913,64 +858,68 @@ final class DevCycleProviderTests: XCTestCase {
         let intValue = Value.integer(42)
 
         // All should convert to empty dictionaries since they're not structures
-        XCTAssertTrue(provider.convertValueToDictionary(stringValue).isEmpty)
-        XCTAssertTrue(provider.convertValueToDictionary(boolValue).isEmpty)
-        XCTAssertTrue(provider.convertValueToDictionary(doubleValue).isEmpty)
-        XCTAssertTrue(provider.convertValueToDictionary(intValue).isEmpty)
+        XCTAssertTrue(DevCycleProvider.convertValueToDictionary(stringValue).isEmpty)
+        XCTAssertTrue(DevCycleProvider.convertValueToDictionary(boolValue).isEmpty)
+        XCTAssertTrue(DevCycleProvider.convertValueToDictionary(doubleValue).isEmpty)
+        XCTAssertTrue(DevCycleProvider.convertValueToDictionary(intValue).isEmpty)
     }
 
     // MARK: - JSON Flag Limitations Tests
 
     func testGetObjectEvaluationWithNonStructureValuesReturnsDefault() throws {
+        mockClient.shouldDefault = false
+
         // .list
         let listDefault = Value.list([.string("array")])
         let listResult = try provider.getObjectEvaluation(
             key: "json-flag-list", defaultValue: listDefault, context: nil)
-        XCTAssertEqual(listResult.value, listDefault)
-        XCTAssertEqual(listResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(listResult.value, .structure([:]))
+        XCTAssertEqual(listResult.reason, Reason.targetingMatch.rawValue)
 
         // .double
         let doubleDefault = Value.double(610)
         let doubleResult = try provider.getObjectEvaluation(
             key: "json-flag-double", defaultValue: doubleDefault, context: nil)
-        XCTAssertEqual(doubleResult.value, doubleDefault)
-        XCTAssertEqual(doubleResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(doubleResult.value, .structure([:]))
+        XCTAssertEqual(doubleResult.reason, Reason.targetingMatch.rawValue)
 
         // .boolean
         let boolDefault = Value.boolean(false)
         let boolResult = try provider.getObjectEvaluation(
             key: "json-flag-bool", defaultValue: boolDefault, context: nil)
-        XCTAssertEqual(boolResult.value, boolDefault)
-        XCTAssertEqual(boolResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(boolResult.value, .structure([:]))
+        XCTAssertEqual(boolResult.reason, Reason.targetingMatch.rawValue)
 
         // .string
         let stringDefault = Value.string("string")
         let stringResult = try provider.getObjectEvaluation(
             key: "json-flag-string", defaultValue: stringDefault, context: nil)
-        XCTAssertEqual(stringResult.value, stringDefault)
-        XCTAssertEqual(stringResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(stringResult.value, .structure([:]))
+        XCTAssertEqual(stringResult.reason, Reason.targetingMatch.rawValue)
 
         // .null
         let nullDefault = Value.null
         let nullResult = try provider.getObjectEvaluation(
             key: "json-flag-null", defaultValue: nullDefault, context: nil)
-        XCTAssertEqual(nullResult.value, nullDefault)
-        XCTAssertEqual(nullResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(nullResult.value, .structure([:]))
+        XCTAssertEqual(nullResult.reason, Reason.targetingMatch.rawValue)
 
         // .date
         let date = Date()
         let dateDefault = Value.date(date)
         let dateResult = try provider.getObjectEvaluation(
             key: "json-flag-date", defaultValue: dateDefault, context: nil)
-        XCTAssertEqual(dateResult.value, dateDefault)
-        XCTAssertEqual(dateResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(dateResult.value, .structure([:]))
+        XCTAssertEqual(dateResult.reason, Reason.targetingMatch.rawValue)
     }
 
     func testGetObjectEvaluationWithStructureValueIsAccepted() throws {
+        mockClient.shouldDefault = false
+
         let structureDefault = Value.structure(["key": .string("value")])
         let structureResult = try provider.getObjectEvaluation(
             key: "json-flag-structure", defaultValue: structureDefault, context: nil)
         XCTAssertEqual(structureResult.value, structureDefault)
-        XCTAssertEqual(structureResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(structureResult.reason, Reason.targetingMatch.rawValue)
     }
 }
