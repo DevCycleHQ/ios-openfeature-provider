@@ -411,30 +411,42 @@ public final class DevCycleProvider: FeatureProvider {
         // Extract attributes from context
         let attributes = unwrapValues(context.asMap())
 
-        // Get first non-empty userId from context, attributes, or targetingKey
-        let userId = [
-            context.getTargetingKey(),
-            attributes["user_id"] as? String,
-            attributes["userId"] as? String,
-        ]
-        .compactMap { $0 }
-        .first { !$0.isEmpty }
-        guard let userId = userId else {
-            Log.error(
-                "Targeting key or user_id missing from EvaluationContext: \(attributes)")
-            throw OpenFeatureError.targetingKeyMissingError
-        }
+        // Check if user is anonymous
+        let isAnonymous = attributes["isAnonymous"] as? Bool ?? false
 
         let userBuilder = DevCycleUser.builder()
-            .userId(userId)
+
+        if isAnonymous {
+            // For anonymous users, we don't need a userId
+            _ = userBuilder.isAnonymous(true)
+        } else {
+            // Get first non-empty userId from context, attributes, or targetingKey
+            let targetingKey = context.getTargetingKey()
+            let userId = [
+                // targetingKey defaults to empty string if not set
+                targetingKey.isEmpty ? nil : targetingKey,
+                attributes["user_id"] as? String,
+                attributes["userId"] as? String,
+            ]
+            .compactMap { $0 }
+            .first { !$0.isEmpty }
+
+            guard let userId = userId else {
+                Log.error(
+                    "Targeting key or user_id missing from EvaluationContext: \(attributes)")
+                throw OpenFeatureError.targetingKeyMissingError
+            }
+            _ = userBuilder.userId(userId)
+        }
 
         // Create dictionaries to collect custom data
         var customData: [String: Any] = [:]
         var privateCustomData: [String: Any] = [:]
 
         for (key, value) in attributes {
-            // Skip targetingKey and user_id as they're handled separately
-            if key == "targetingKey" || key == "user_id" || key == "userId" {
+            // Skip targetingKey, user_id, and isAnonymous as they're handled separately
+            if key == "targetingKey" || key == "user_id" || key == "userId" || key == "isAnonymous"
+            {
                 continue
             }
 

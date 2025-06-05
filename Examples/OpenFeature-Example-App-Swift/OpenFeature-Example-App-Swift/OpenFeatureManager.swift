@@ -10,7 +10,7 @@ import Foundation
 import OpenFeature
 
 struct DevCycleKeys {
-    static var DEVELOPMENT = "<DEVCYCLE_MOBILE_SDK_KEY>"
+    static var DEVELOPMENT = "YOUR_DEVCYCLE_SDK_KEY_HERE"
 }
 
 class OpenFeatureManager {

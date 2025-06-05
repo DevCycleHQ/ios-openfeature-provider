@@ -598,6 +598,110 @@ final class DevCycleProviderTests: XCTestCase {
         XCTAssertEqual(user3.userId, "primary-id")
     }
 
+    func testDvcUserFromContextWithAnonymousUser() throws {
+        // Create a context with isAnonymous=true and no userId
+        let context = MutableContext(
+            structure: MutableStructure(attributes: [
+                "isAnonymous": .boolean(true)
+            ])
+        )
+
+        // Convert to DevCycleUser
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+
+        // Verify anonymous user properties
+        XCTAssertEqual(user.isAnonymous, true)
+        XCTAssertNotNil(user.userId, "Anonymous users should still get a generated userId")
+    }
+
+    func testDvcUserFromContextWithAnonymousUserAndOtherProperties() throws {
+        // Create a context with isAnonymous=true and other user properties
+        let context = MutableContext(
+            structure: MutableStructure(attributes: [
+                "isAnonymous": .boolean(true),
+                "language": .string("en"),
+                "country": .string("US"),
+                "customData": .structure([
+                    "plan": .string("premium"),
+                    "visits": .double(5),
+                ]),
+                "privateCustomData": .structure([
+                    "internalId": .string("internal-123")
+                ]),
+            ])
+        )
+
+        // Convert to DevCycleUser
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+
+        // Verify anonymous user properties
+        XCTAssertEqual(user.isAnonymous, true)
+        XCTAssertNotNil(user.userId, "Anonymous users should still get a generated userId")
+
+        // Verify other properties are set correctly
+        XCTAssertEqual(user.language, "en")
+        XCTAssertEqual(user.country, "US")
+
+        // Verify custom data
+        XCTAssertNotNil(user.customData)
+        if let customData = user.customData?.data {
+            if case .string(let value) = customData["plan"] {
+                XCTAssertEqual(value, "premium")
+            } else {
+                XCTFail("Expected string value for 'plan'")
+            }
+
+            if case .number(let value) = customData["visits"] {
+                XCTAssertEqual(value, 5)
+            } else {
+                XCTFail("Expected number value for 'visits'")
+            }
+        }
+
+        // Verify private custom data
+        XCTAssertNotNil(user.privateCustomData)
+        if let privateData = user.privateCustomData?.data {
+            if case .string(let value) = privateData["internalId"] {
+                XCTAssertEqual(value, "internal-123")
+            } else {
+                XCTFail("Expected string value for 'internalId'")
+            }
+        }
+    }
+
+    func testDvcUserFromContextWithAnonymousFalse() throws {
+        // Create a context with isAnonymous=false but no userId - should fail
+        let context = MutableContext(
+            structure: MutableStructure(attributes: [
+                "isAnonymous": .boolean(false)
+            ])
+        )
+
+        // Converting should throw since isAnonymous=false requires a userId
+        XCTAssertThrowsError(try DevCycleProvider.dvcUserFromContext(context)) { error in
+            XCTAssertEqual(error as? OpenFeatureError, OpenFeatureError.targetingKeyMissingError)
+        }
+    }
+
+    func testDvcUserFromContextWithAnonymousFalseAndUserId() throws {
+        // Create a context with isAnonymous=false and a userId
+        let context = MutableContext(
+            targetingKey: "test-user-123",
+            structure: MutableStructure(attributes: [
+                "isAnonymous": .boolean(false),
+                "email": .string("user@example.com"),
+            ])
+        )
+
+        // Convert to DevCycleUser
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+
+        // Verify properties
+        XCTAssertEqual(user.userId, "test-user-123")
+        XCTAssertEqual(user.isAnonymous, false)
+        XCTAssertEqual(user.email, "user@example.com")
+    }
+
     // MARK: - Value Unwrapping Tests
 
     func testUnwrapValues() {
