@@ -411,31 +411,21 @@ public final class DevCycleProvider: FeatureProvider {
         // Extract attributes from context
         let attributes = unwrapValues(context.asMap())
 
-        // Check if user is anonymous
-        let isAnonymous = attributes["isAnonymous"] as? Bool ?? false
-
         let userBuilder = DevCycleUser.builder()
 
-        if isAnonymous {
-            // For anonymous users, we don't need a userId
-            _ = userBuilder.isAnonymous(true)
-        } else {
-            // Get first non-empty userId from context, attributes, or targetingKey
-            let targetingKey = context.getTargetingKey()
-            let userId = [
-                // targetingKey defaults to empty string if not set
-                targetingKey.isEmpty ? nil : targetingKey,
-                attributes["user_id"] as? String,
-                attributes["userId"] as? String,
-            ]
-            .compactMap { $0 }
-            .first { !$0.isEmpty }
+        // Get first non-empty userId from context, attributes, or targetingKey
+        let targetingKey = context.getTargetingKey()
+        let userId = [
+            // targetingKey defaults to empty string if not set
+            targetingKey.isEmpty ? nil : targetingKey,
+            attributes["user_id"] as? String,
+            attributes["userId"] as? String,
+        ]
+        .compactMap { $0 }
+        .first { !$0.isEmpty }
 
-            guard let userId = userId else {
-                Log.error(
-                    "Targeting key or user_id missing from EvaluationContext: \(attributes)")
-                throw OpenFeatureError.targetingKeyMissingError
-            }
+        // Set userId if available, else set isAnonymous to true
+        if let userId = userId {
             _ = userBuilder.userId(userId)
         }
 
@@ -444,9 +434,8 @@ public final class DevCycleProvider: FeatureProvider {
         var privateCustomData: [String: Any] = [:]
 
         for (key, value) in attributes {
-            // Skip targetingKey, user_id, and isAnonymous as they're handled separately
-            if key == "targetingKey" || key == "user_id" || key == "userId" || key == "isAnonymous"
-            {
+            // Skip targetingKey, user_id, and userId as they're handled separately
+            if key == "targetingKey" || key == "user_id" || key == "userId" {
                 continue
             }
 
@@ -470,6 +459,14 @@ public final class DevCycleProvider: FeatureProvider {
                         "Expected DevCycleUser property \"\(key)\" to be \"String\" but got \"\(type(of: value))\" in EvaluationContext. Ignoring value."
                     )
                 }
+            } else if key == "isAnonymous" {
+                if let boolValue = value as? Bool {
+                    _ = userBuilder.isAnonymous(boolValue)
+                } else {
+                    Log.warn(
+                        "Expected isAnonymous to be boolean but got \"\(type(of: value))\" in EvaluationContext. Ignoring value."
+                    )
+                }
             } else if key == "privateCustomData", let objectValue = value as? [String: Any] {
                 privateCustomData = convertToDVCCustomData(objectValue)
             } else if key == "customData", let objectValue = value as? [String: Any] {
@@ -486,6 +483,11 @@ public final class DevCycleProvider: FeatureProvider {
             }
         }
 
+        // If no userId was set and isAnonymous wasn't explicitly set, default to anonymous
+        if userId == nil && attributes["isAnonymous"] == nil {
+            _ = userBuilder.isAnonymous(true)
+        }
+
         // Add custom data to user
         if !customData.isEmpty {
             _ = userBuilder.customData(customData)
@@ -496,13 +498,11 @@ public final class DevCycleProvider: FeatureProvider {
             _ = userBuilder.privateCustomData(privateCustomData)
         }
 
-        let user = try userBuilder.build()
-        if let data = try? JSONEncoder().encode(user),
-            let jsonString = String(data: data, encoding: .utf8)
-        {
-            Log.info("DevCycle user: \(jsonString)")
+        do {
+            return try userBuilder.build()
+        } catch {
+            throw OpenFeatureError.invalidContextError
         }
-        return user
     }
 
     internal static func unwrapValues(_ map: [String: Value]) -> [String: Any] {

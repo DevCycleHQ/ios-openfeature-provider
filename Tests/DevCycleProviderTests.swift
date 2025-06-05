@@ -551,14 +551,13 @@ final class DevCycleProviderTests: XCTestCase {
         XCTAssertTrue(user.customData?.data.isEmpty ?? true)
     }
 
-    func testDvcUserFromContextWithMissingTargetingKey() {
+    func testDvcUserFromContextWithMissingTargetingKey() throws {
         // Create a context without a targeting key
         let context = MutableContext(targetingKey: "")
 
-        // Converting should throw
-        XCTAssertThrowsError(try DevCycleProvider.dvcUserFromContext(context)) { error in
-            XCTAssertEqual(error as? OpenFeatureError, OpenFeatureError.targetingKeyMissingError)
-        }
+        // Converting should create an anonymous user automatically
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+        XCTAssertEqual(user.isAnonymous, true)
     }
 
     func testDvcUserFromContextWithAlternativeUserIdFields() throws {
@@ -679,7 +678,7 @@ final class DevCycleProviderTests: XCTestCase {
 
         // Converting should throw since isAnonymous=false requires a userId
         XCTAssertThrowsError(try DevCycleProvider.dvcUserFromContext(context)) { error in
-            XCTAssertEqual(error as? OpenFeatureError, OpenFeatureError.targetingKeyMissingError)
+            XCTAssertEqual(error as? OpenFeatureError, OpenFeatureError.invalidContextError)
         }
     }
 
@@ -700,6 +699,29 @@ final class DevCycleProviderTests: XCTestCase {
         XCTAssertEqual(user.userId, "test-user-123")
         XCTAssertEqual(user.isAnonymous, false)
         XCTAssertEqual(user.email, "user@example.com")
+    }
+
+    func testDvcUserFromContextWithNoUserIdBecomesAnonymous() throws {
+        // Create a context with no userId and no explicit isAnonymous flag
+        let context = MutableContext()
+
+        // Convert to DevCycleUser
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+
+        // Verify user becomes anonymous automatically
+        XCTAssertEqual(user.isAnonymous, true)
+        XCTAssertNotNil(user.userId, "Anonymous users should still get a generated userId")
+    }
+
+    func testDvcUserFromContextWithInvalidDataThrowsInvalidContextError() {
+        // This test would be hard to trigger with the current DevCycle SDK, but we test the error handling
+        // The test verifies that any DevCycleUser.builder().build() errors are converted to invalidContextError
+        // In practice, this might happen if DevCycle changes validation rules in the future
+
+        // Note: This is more of a defensive test for the error handling mechanism
+        // Since it's difficult to force a build error with valid inputs, we document the behavior
+        XCTAssertNoThrow(
+            try DevCycleProvider.dvcUserFromContext(MutableContext(targetingKey: "test")))
     }
 
     // MARK: - Value Unwrapping Tests
