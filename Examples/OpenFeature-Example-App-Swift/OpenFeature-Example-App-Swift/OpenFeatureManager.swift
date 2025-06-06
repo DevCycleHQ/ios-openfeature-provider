@@ -26,8 +26,20 @@ class OpenFeatureManager {
         self.provider = dvcProvider
 
         Task {
+            let userContext: EvaluationContext
+            if let user = user {
+                userContext = user
+            } else {
+                // if no user, create anonymous user
+                userContext = MutableContext(
+                    structure: MutableStructure(attributes: [
+                        "isAnonymous": .boolean(true)
+                    ])
+                )
+            }
+
             await OpenFeatureAPI.shared.setProviderAndWait(
-                provider: dvcProvider, initialContext: user)
+                provider: dvcProvider, initialContext: userContext)
         }
     }
 }

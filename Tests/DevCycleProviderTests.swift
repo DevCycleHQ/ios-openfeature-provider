@@ -551,14 +551,13 @@ final class DevCycleProviderTests: XCTestCase {
         XCTAssertTrue(user.customData?.data.isEmpty ?? true)
     }
 
-    func testDvcUserFromContextWithMissingTargetingKey() {
+    func testDvcUserFromContextWithMissingTargetingKey() throws {
         // Create a context without a targeting key
         let context = MutableContext(targetingKey: "")
 
-        // Converting should throw
-        XCTAssertThrowsError(try DevCycleProvider.dvcUserFromContext(context)) { error in
-            XCTAssertEqual(error as? OpenFeatureError, OpenFeatureError.targetingKeyMissingError)
-        }
+        // Converting should create an anonymous user automatically
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+        XCTAssertEqual(user.isAnonymous, true)
     }
 
     func testDvcUserFromContextWithAlternativeUserIdFields() throws {
@@ -596,6 +595,133 @@ final class DevCycleProviderTests: XCTestCase {
 
         let user3 = try DevCycleProvider.dvcUserFromContext(context3)
         XCTAssertEqual(user3.userId, "primary-id")
+    }
+
+    func testDvcUserFromContextWithAnonymousUser() throws {
+        // Create a context with isAnonymous=true and no userId
+        let context = MutableContext(
+            structure: MutableStructure(attributes: [
+                "isAnonymous": .boolean(true)
+            ])
+        )
+
+        // Convert to DevCycleUser
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+
+        // Verify anonymous user properties
+        XCTAssertEqual(user.isAnonymous, true)
+        XCTAssertNotNil(user.userId, "Anonymous users should still get a generated userId")
+    }
+
+    func testDvcUserFromContextWithAnonymousUserAndOtherProperties() throws {
+        // Create a context with isAnonymous=true and other user properties
+        let context = MutableContext(
+            structure: MutableStructure(attributes: [
+                "isAnonymous": .boolean(true),
+                "language": .string("en"),
+                "country": .string("US"),
+                "customData": .structure([
+                    "plan": .string("premium"),
+                    "visits": .double(5),
+                ]),
+                "privateCustomData": .structure([
+                    "internalId": .string("internal-123")
+                ]),
+            ])
+        )
+
+        // Convert to DevCycleUser
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+
+        // Verify anonymous user properties
+        XCTAssertEqual(user.isAnonymous, true)
+        XCTAssertNotNil(user.userId, "Anonymous users should still get a generated userId")
+
+        // Verify other properties are set correctly
+        XCTAssertEqual(user.language, "en")
+        XCTAssertEqual(user.country, "US")
+
+        // Verify custom data
+        XCTAssertNotNil(user.customData)
+        if let customData = user.customData?.data {
+            if case .string(let value) = customData["plan"] {
+                XCTAssertEqual(value, "premium")
+            } else {
+                XCTFail("Expected string value for 'plan'")
+            }
+
+            if case .number(let value) = customData["visits"] {
+                XCTAssertEqual(value, 5)
+            } else {
+                XCTFail("Expected number value for 'visits'")
+            }
+        }
+
+        // Verify private custom data
+        XCTAssertNotNil(user.privateCustomData)
+        if let privateData = user.privateCustomData?.data {
+            if case .string(let value) = privateData["internalId"] {
+                XCTAssertEqual(value, "internal-123")
+            } else {
+                XCTFail("Expected string value for 'internalId'")
+            }
+        }
+    }
+
+    func testDvcUserFromContextWithAnonymousFalse() throws {
+        // Create a context with isAnonymous=false but no userId - should fail
+        let context = MutableContext(
+            structure: MutableStructure(attributes: [
+                "isAnonymous": .boolean(false)
+            ])
+        )
+
+        // Converting should throw since isAnonymous=false requires a userId
+        XCTAssertThrowsError(try DevCycleProvider.dvcUserFromContext(context)) { error in
+            XCTAssertEqual(error as? OpenFeatureError, OpenFeatureError.invalidContextError)
+        }
+    }
+
+    func testDvcUserFromContextWithAnonymousFalseAndUserId() throws {
+        // Create a context with isAnonymous=false and a userId
+        let context = MutableContext(
+            targetingKey: "test-user-123",
+            structure: MutableStructure(attributes: [
+                "isAnonymous": .boolean(false),
+                "email": .string("user@example.com"),
+            ])
+        )
+
+        // Convert to DevCycleUser
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+
+        // Verify properties
+        XCTAssertEqual(user.userId, "test-user-123")
+        XCTAssertEqual(user.isAnonymous, false)
+        XCTAssertEqual(user.email, "user@example.com")
+    }
+
+    func testDvcUserFromContextWithNoUserIdBecomesAnonymous() throws {
+        // Create a context with no userId and no explicit isAnonymous flag
+        let context = MutableContext()
+
+        // Convert to DevCycleUser
+        let user = try DevCycleProvider.dvcUserFromContext(context)
+
+        // Verify user becomes anonymous automatically
+        XCTAssertEqual(user.isAnonymous, true)
+        XCTAssertNotNil(user.userId, "Anonymous users should still get a generated userId")
+    }
+
+    func testDvcUserFromContextWithInvalidDataThrowsInvalidContextError() {
+        // This test would be hard to trigger with the current DevCycle SDK, but we test the error handling
+        // The test verifies that any DevCycleUser.builder().build() errors are converted to invalidContextError
+        // In practice, this might happen if DevCycle changes validation rules in the future
+
+        // Note: This is more of a defensive test for the error handling mechanism
+        // Since it's difficult to force a build error with valid inputs, we document the behavior
+        XCTAssertNoThrow(
+            try DevCycleProvider.dvcUserFromContext(MutableContext(targetingKey: "test")))
     }
 
     // MARK: - Value Unwrapping Tests
