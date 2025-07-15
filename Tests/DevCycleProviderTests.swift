@@ -138,7 +138,7 @@ final class DevCycleProviderTests: XCTestCase {
         let result = try provider.getObjectEvaluation(
             key: "test-object", defaultValue: defaultValue, context: nil as EvaluationContext?)
 
-        XCTAssertEqual(result.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
 
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["name"], .string("John"))
@@ -172,7 +172,7 @@ final class DevCycleProviderTests: XCTestCase {
             context: nil as EvaluationContext?
         )
 
-        XCTAssertEqual(result.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
 
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["string"], .string("text"))

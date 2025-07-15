@@ -177,8 +177,8 @@ public final class DevCycleProvider: FeatureProvider {
         let variable = devcycleClient!.variable(key: key, defaultValue: defaultValue)
         return ProviderEvaluation(
             value: variable.value,
-            reason: variable.isDefaulted
-                ? Reason.defaultReason.rawValue : Reason.targetingMatch.rawValue
+            reason: DevCycleProvider.getEvalReason(
+                isDefaulted: variable.isDefaulted, evalReason: variable.eval)
         )
     }
 
@@ -206,8 +206,8 @@ public final class DevCycleProvider: FeatureProvider {
         let variable = devcycleClient!.variable(key: key, defaultValue: defaultValue)
         return ProviderEvaluation(
             value: variable.value,
-            reason: variable.isDefaulted
-                ? Reason.defaultReason.rawValue : Reason.targetingMatch.rawValue
+            reason: DevCycleProvider.getEvalReason(
+                isDefaulted: variable.isDefaulted, evalReason: variable.eval)
         )
     }
 
@@ -238,8 +238,8 @@ public final class DevCycleProvider: FeatureProvider {
 
         return ProviderEvaluation(
             value: Int64(variable.value),
-            reason: variable.isDefaulted
-                ? Reason.defaultReason.rawValue : Reason.targetingMatch.rawValue
+            reason: DevCycleProvider.getEvalReason(
+                isDefaulted: variable.isDefaulted, evalReason: variable.eval)
         )
     }
 
@@ -267,8 +267,8 @@ public final class DevCycleProvider: FeatureProvider {
         let variable = devcycleClient!.variable(key: key, defaultValue: defaultValue)
         return ProviderEvaluation(
             value: variable.value,
-            reason: variable.isDefaulted
-                ? Reason.defaultReason.rawValue : Reason.targetingMatch.rawValue
+            reason: DevCycleProvider.getEvalReason(
+                isDefaulted: variable.isDefaulted, evalReason: variable.eval)
         )
     }
 
@@ -299,8 +299,8 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: variable.isDefaulted
                 ? defaultValue : DevCycleProvider.convertDictionaryToValue(variable.value),
-            reason: variable.isDefaulted
-                ? Reason.defaultReason.rawValue : Reason.targetingMatch.rawValue
+            reason: DevCycleProvider.getEvalReason(
+                isDefaulted: variable.isDefaulted, evalReason: variable.eval)
         )
     }
 
@@ -543,5 +543,12 @@ public final class DevCycleProvider: FeatureProvider {
             }
         }
         return customData
+    }
+
+    internal static func getEvalReason(isDefaulted: Bool, evalReason: EvalReason?) -> String {
+        if let evalReason = evalReason {
+            return evalReason.reason
+        }
+        return isDefaulted ? Reason.defaultReason.rawValue : Reason.targetingMatch.rawValue
     }
 }

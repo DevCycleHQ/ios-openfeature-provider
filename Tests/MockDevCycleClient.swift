@@ -30,7 +30,7 @@ class MockDevCycleClient: DevCycleClientProtocol {
 
     private func makeMockVariable<T>(key: String, defaultValue: T) -> DVCVariable<T> {
         let value: T? = shouldDefault ? nil : defaultValue
-        return DVCVariable(key: key, value: value, defaultValue: defaultValue, evalReason: nil)
+        return DVCVariable(key: key, value: value, defaultValue: defaultValue, eval: nil)
     }
 
     func variableValue(key: String, defaultValue: Bool) -> Bool { defaultValue }
