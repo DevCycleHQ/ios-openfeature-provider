@@ -25,12 +25,14 @@ class DVCVariableMock<T> {
 class MockDevCycleClient: DevCycleClientProtocol {
     var mockVariableValue: [String: Any] = [:]
     var mockIsDefaulted: Bool = true
-    var mockEvalReason: String? = nil
     var shouldDefault: Bool = true
 
     private func makeMockVariable<T>(key: String, defaultValue: T) -> DVCVariable<T> {
         let value: T? = shouldDefault ? nil : defaultValue
-        return DVCVariable(key: key, value: value, defaultValue: defaultValue, eval: nil)
+        
+        // Requires DevCycle 1.24.2
+        let evalReason = shouldDefault ? nil : EvalReason.createOFEvalReason(reason: "TARGETING_MATCH")
+        return DVCVariable(key: key, value: value, defaultValue: defaultValue, eval: evalReason)
     }
 
     func variableValue(key: String, defaultValue: Bool) -> Bool { defaultValue }
