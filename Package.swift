@@ -23,7 +23,7 @@ let package = Package(
         .package(
             name: "DevCycle",
             url: "https://github.com/DevCycleHQ/ios-client-sdk.git",
-            .upToNextMajor(from: "1.21.0")
+            .upToNextMajor(from: "1.21.2")
         ),
     ],
     targets: [
