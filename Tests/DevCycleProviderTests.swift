@@ -123,7 +123,7 @@ final class DevCycleProviderTests: XCTestCase {
     // MARK: - Object Evaluation Tests
 
     func testObjectEvaluation() throws {
-        mockClient.shouldDefault = false
+        mockClient.shouldDefault = true
 
         // Test object evaluation with a complex structure
         let defaultValue = Value.structure([
@@ -138,7 +138,7 @@ final class DevCycleProviderTests: XCTestCase {
         let result = try provider.getObjectEvaluation(
             key: "test-object", defaultValue: defaultValue, context: nil as EvaluationContext?)
 
-        XCTAssertEqual(result.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
 
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["name"], .string("John"))
@@ -156,7 +156,7 @@ final class DevCycleProviderTests: XCTestCase {
     }
 
     func testComplexObjectEvaluation() throws {
-        mockClient.shouldDefault = false
+        mockClient.shouldDefault = true
 
         // Test object evaluation with mixed types
         let defaultValue = Value.structure([
@@ -172,7 +172,7 @@ final class DevCycleProviderTests: XCTestCase {
             context: nil as EvaluationContext?
         )
 
-        XCTAssertEqual(result.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
 
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["string"], .string("text"))
@@ -1000,35 +1000,35 @@ final class DevCycleProviderTests: XCTestCase {
         let listResult = try provider.getObjectEvaluation(
             key: "json-flag-list", defaultValue: listDefault, context: nil)
         XCTAssertEqual(listResult.value, .structure([:]))
-        XCTAssertEqual(listResult.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(listResult.reason, "TARGETING_MATCH")
 
         // .double
         let doubleDefault = Value.double(610)
         let doubleResult = try provider.getObjectEvaluation(
             key: "json-flag-double", defaultValue: doubleDefault, context: nil)
         XCTAssertEqual(doubleResult.value, .structure([:]))
-        XCTAssertEqual(doubleResult.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(doubleResult.reason, "TARGETING_MATCH")
 
         // .boolean
         let boolDefault = Value.boolean(false)
         let boolResult = try provider.getObjectEvaluation(
             key: "json-flag-bool", defaultValue: boolDefault, context: nil)
         XCTAssertEqual(boolResult.value, .structure([:]))
-        XCTAssertEqual(boolResult.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(boolResult.reason, "TARGETING_MATCH")
 
         // .string
         let stringDefault = Value.string("string")
         let stringResult = try provider.getObjectEvaluation(
             key: "json-flag-string", defaultValue: stringDefault, context: nil)
         XCTAssertEqual(stringResult.value, .structure([:]))
-        XCTAssertEqual(stringResult.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(stringResult.reason, "TARGETING_MATCH")
 
         // .null
         let nullDefault = Value.null
         let nullResult = try provider.getObjectEvaluation(
             key: "json-flag-null", defaultValue: nullDefault, context: nil)
         XCTAssertEqual(nullResult.value, .structure([:]))
-        XCTAssertEqual(nullResult.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(nullResult.reason, "TARGETING_MATCH")
 
         // .date
         let date = Date()
@@ -1036,7 +1036,7 @@ final class DevCycleProviderTests: XCTestCase {
         let dateResult = try provider.getObjectEvaluation(
             key: "json-flag-date", defaultValue: dateDefault, context: nil)
         XCTAssertEqual(dateResult.value, .structure([:]))
-        XCTAssertEqual(dateResult.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(dateResult.reason, "TARGETING_MATCH")
     }
 
     func testGetObjectEvaluationWithStructureValueIsAccepted() throws {
@@ -1046,6 +1046,6 @@ final class DevCycleProviderTests: XCTestCase {
         let structureResult = try provider.getObjectEvaluation(
             key: "json-flag-structure", defaultValue: structureDefault, context: nil)
         XCTAssertEqual(structureResult.value, structureDefault)
-        XCTAssertEqual(structureResult.reason, Reason.targetingMatch.rawValue)
+        XCTAssertEqual(structureResult.reason, "TARGETING_MATCH")
     }
 }
