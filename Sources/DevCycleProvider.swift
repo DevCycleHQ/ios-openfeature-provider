@@ -175,8 +175,10 @@ public final class DevCycleProvider: FeatureProvider {
         }
 
         let variable = devcycleClient!.variable(key: key, defaultValue: defaultValue)
+
         return ProviderEvaluation(
             value: variable.value,
+            flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
             reason: DevCycleProvider.getEvalReason(variable: variable)
         )
     }
@@ -205,6 +207,7 @@ public final class DevCycleProvider: FeatureProvider {
         let variable = devcycleClient!.variable(key: key, defaultValue: defaultValue)
         return ProviderEvaluation(
             value: variable.value,
+            flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
             reason: DevCycleProvider.getEvalReason(variable: variable)
         )
     }
@@ -236,6 +239,7 @@ public final class DevCycleProvider: FeatureProvider {
 
         return ProviderEvaluation(
             value: Int64(variable.value),
+            flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
             reason: DevCycleProvider.getEvalReason(variable: variable)
         )
     }
@@ -264,6 +268,7 @@ public final class DevCycleProvider: FeatureProvider {
         let variable = devcycleClient!.variable(key: key, defaultValue: defaultValue)
         return ProviderEvaluation(
             value: variable.value,
+            flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
             reason: DevCycleProvider.getEvalReason(variable: variable)
         )
     }
@@ -295,6 +300,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: variable.isDefaulted
                 ? defaultValue : DevCycleProvider.convertDictionaryToValue(variable.value),
+            flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
             reason: DevCycleProvider.getEvalReason(variable: variable)
         )
     }
@@ -545,5 +551,18 @@ public final class DevCycleProvider: FeatureProvider {
             return evalReason.reason
         }
         return variable.isDefaulted ? Reason.defaultReason.rawValue : Reason.targetingMatch.rawValue
+    }
+
+    internal static func getFlagMetadata<T>(variable: DVCVariable<T>) -> [String: FlagMetadataValue] {
+        var flagMetadata: [String: FlagMetadataValue] = [:]
+        if let evalReason = variable.eval {
+            if let evalDetails = evalReason.details {
+                flagMetadata["evalDetails"] = FlagMetadataValue.of(evalDetails)
+            }
+            if let evalTargetId = evalReason.targetId {
+                flagMetadata["evalTargetId"] = FlagMetadataValue.of(evalTargetId)
+            }
+        }
+        return flagMetadata
     }
 }

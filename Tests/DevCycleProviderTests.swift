@@ -100,24 +100,28 @@ final class DevCycleProviderTests: XCTestCase {
             key: "test-bool", defaultValue: true, context: nil as EvaluationContext?)
         XCTAssertEqual(boolResult.value, true)
         XCTAssertEqual(boolResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(boolResult.flagMetadata, [:])
 
         // String evaluation
         let stringResult = try provider.getStringEvaluation(
             key: "test-string", defaultValue: "default-value", context: nil as EvaluationContext?)
         XCTAssertEqual(stringResult.value, "default-value")
         XCTAssertEqual(stringResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(stringResult.flagMetadata, [:])
 
         // Number evaluation
         let numberResult = try provider.getDoubleEvaluation(
             key: "test-number", defaultValue: 42.0, context: nil as EvaluationContext?)
         XCTAssertEqual(numberResult.value, 42.0)
         XCTAssertEqual(numberResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(numberResult.flagMetadata, [:])
 
         // Integer evaluation
         let integerResult = try provider.getIntegerEvaluation(
             key: "test-integer", defaultValue: 42, context: nil as EvaluationContext?)
         XCTAssertEqual(integerResult.value, 42)
         XCTAssertEqual(integerResult.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(integerResult.flagMetadata, [:])
     }
 
     // MARK: - Object Evaluation Tests
@@ -139,6 +143,7 @@ final class DevCycleProviderTests: XCTestCase {
             key: "test-object", defaultValue: defaultValue, context: nil as EvaluationContext?)
 
         XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
+        XCTAssertEqual(result.flagMetadata, [:])
 
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["name"], .string("John"))
@@ -173,7 +178,8 @@ final class DevCycleProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
-
+        XCTAssertEqual(result.flagMetadata, [:])
+        
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["string"], .string("text"))
             XCTAssertEqual(attributes["boolean"], .boolean(true))
@@ -1001,6 +1007,7 @@ final class DevCycleProviderTests: XCTestCase {
             key: "json-flag-list", defaultValue: listDefault, context: nil)
         XCTAssertEqual(listResult.value, .structure([:]))
         XCTAssertEqual(listResult.reason, "TARGETING_MATCH")
+        XCTAssertEqual(listResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
 
         // .double
         let doubleDefault = Value.double(610)
@@ -1008,6 +1015,7 @@ final class DevCycleProviderTests: XCTestCase {
             key: "json-flag-double", defaultValue: doubleDefault, context: nil)
         XCTAssertEqual(doubleResult.value, .structure([:]))
         XCTAssertEqual(doubleResult.reason, "TARGETING_MATCH")
+        XCTAssertEqual(doubleResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
 
         // .boolean
         let boolDefault = Value.boolean(false)
@@ -1015,6 +1023,7 @@ final class DevCycleProviderTests: XCTestCase {
             key: "json-flag-bool", defaultValue: boolDefault, context: nil)
         XCTAssertEqual(boolResult.value, .structure([:]))
         XCTAssertEqual(boolResult.reason, "TARGETING_MATCH")
+        XCTAssertEqual(boolResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
 
         // .string
         let stringDefault = Value.string("string")
@@ -1022,6 +1031,7 @@ final class DevCycleProviderTests: XCTestCase {
             key: "json-flag-string", defaultValue: stringDefault, context: nil)
         XCTAssertEqual(stringResult.value, .structure([:]))
         XCTAssertEqual(stringResult.reason, "TARGETING_MATCH")
+        XCTAssertEqual(stringResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
 
         // .null
         let nullDefault = Value.null
@@ -1029,6 +1039,7 @@ final class DevCycleProviderTests: XCTestCase {
             key: "json-flag-null", defaultValue: nullDefault, context: nil)
         XCTAssertEqual(nullResult.value, .structure([:]))
         XCTAssertEqual(nullResult.reason, "TARGETING_MATCH")
+        XCTAssertEqual(stringResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
 
         // .date
         let date = Date()
@@ -1037,6 +1048,7 @@ final class DevCycleProviderTests: XCTestCase {
             key: "json-flag-date", defaultValue: dateDefault, context: nil)
         XCTAssertEqual(dateResult.value, .structure([:]))
         XCTAssertEqual(dateResult.reason, "TARGETING_MATCH")
+        XCTAssertEqual(stringResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
     }
 
     func testGetObjectEvaluationWithStructureValueIsAccepted() throws {
@@ -1047,5 +1059,6 @@ final class DevCycleProviderTests: XCTestCase {
             key: "json-flag-structure", defaultValue: structureDefault, context: nil)
         XCTAssertEqual(structureResult.value, structureDefault)
         XCTAssertEqual(structureResult.reason, "TARGETING_MATCH")
+        XCTAssertEqual(structureResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
     }
 }
