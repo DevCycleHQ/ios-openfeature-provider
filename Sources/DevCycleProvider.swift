@@ -294,7 +294,7 @@ public final class DevCycleProvider: FeatureProvider {
             )
         }
 
-        let dictionaryValue = DevCycleProvider.convertValueToDictionary(defaultValue)
+        let dictionaryValue = try DevCycleProvider.convertValueToDictionary(defaultValue)
         let variable = devcycleClient!.variable(key: key, defaultValue: dictionaryValue)
 
         return ProviderEvaluation(
@@ -341,28 +341,34 @@ public final class DevCycleProvider: FeatureProvider {
         - Parameter value: The Value to convert
         - Returns: The converted Dictionary
      */
-    internal static func convertValueToDictionary(_ value: Value) -> [String: Any] {
+    internal static func convertValueToDictionary(_ value: Value) throws -> [String: Any] {
+        // Only allow structure (object) values
+        guard case .structure(let attributes) = value else {
+            throw OpenFeatureError.parseError(
+                message:
+                    "DevCycle only supports object values for JSON flags. Received non-object value: \(value)"
+            )
+        }
+
         var dictionaryValue: [String: Any] = [:]
 
-        // Convert Value to Dictionary if possible
-        if case .structure(let attributes) = value {
-            for (key, value) in attributes {
-                switch value {
-                case .string(let stringValue):
-                    dictionaryValue[key] = stringValue
-                case .boolean(let boolValue):
-                    dictionaryValue[key] = boolValue
-                case let .double(doubleValue):
-                    dictionaryValue[key] = doubleValue
-                case let .integer(intValue):
-                    dictionaryValue[key] = intValue
-                case .structure(let structValue):
-                    // Recursively convert nested structures
-                    dictionaryValue[key] = convertValueToDictionary(.structure(structValue))
-                default:
-                    // Skip unsupported types
-                    break
-                }
+        for (key, value) in attributes {
+            switch value {
+            case .string(let stringValue):
+                dictionaryValue[key] = stringValue
+            case .boolean(let boolValue):
+                dictionaryValue[key] = boolValue
+            case let .double(doubleValue):
+                dictionaryValue[key] = doubleValue
+            case let .integer(intValue):
+                dictionaryValue[key] = intValue
+            case .structure(let structValue):
+                // Recursively convert nested structures
+                dictionaryValue[key] = try convertValueToDictionary(.structure(structValue))
+            default:
+                // Skip unsupported types
+                Log.warn("Skipping unsupported value type in JSON flags for key '\(key)': \(value)")
+                break
             }
         }
 

@@ -179,7 +179,7 @@ final class DevCycleProviderTests: XCTestCase {
 
         XCTAssertEqual(result.reason, Reason.defaultReason.rawValue)
         XCTAssertEqual(result.flagMetadata, [:])
-        
+
         if case .structure(let attributes) = result.value {
             XCTAssertEqual(attributes["string"], .string("text"))
             XCTAssertEqual(attributes["boolean"], .boolean(true))
@@ -899,7 +899,7 @@ final class DevCycleProviderTests: XCTestCase {
 
     // MARK: - Value to Dictionary Conversion Tests
 
-    func testConvertValueToDictionaryWithPrimitiveTypes() {
+    func testConvertValueToDictionaryWithPrimitiveTypes() throws {
         // Test the internal method directly with primitive types
         let value = Value.structure([
             "string": .string("hello world"),
@@ -908,7 +908,7 @@ final class DevCycleProviderTests: XCTestCase {
             "double": .double(45.67),
         ])
 
-        let result = DevCycleProvider.convertValueToDictionary(value)
+        let result = try DevCycleProvider.convertValueToDictionary(value)
 
         // Validate the result
         XCTAssertEqual(result.count, 4, "Should have 4 entries")
@@ -918,7 +918,7 @@ final class DevCycleProviderTests: XCTestCase {
         XCTAssertEqual(result["double"] as? Double, 45.67)
     }
 
-    func testConvertValueToDictionaryWithNestedStructure() {
+    func testConvertValueToDictionaryWithNestedStructure() throws {
         // Test the internal method with nested structures
         let value = Value.structure([
             "topLevel": .boolean(true),
@@ -932,7 +932,7 @@ final class DevCycleProviderTests: XCTestCase {
             ]),
         ])
 
-        let result = DevCycleProvider.convertValueToDictionary(value)
+        let result = try DevCycleProvider.convertValueToDictionary(value)
 
         // Validate the result
         XCTAssertEqual(result.count, 2, "Should have 2 top-level entries")
@@ -957,14 +957,14 @@ final class DevCycleProviderTests: XCTestCase {
         }
     }
 
-    func testConvertValueToDictionaryWithUnsupportedTypes() {
+    func testConvertValueToDictionaryWithUnsupportedTypes() throws {
         // Test how the method handles unsupported Value types
         let value = Value.structure([
             "normalKey": .string("normal value"),
             "unsupportedKey": .list([.string("item1"), .string("item2")]),
         ])
 
-        let result = DevCycleProvider.convertValueToDictionary(value)
+        let result = try DevCycleProvider.convertValueToDictionary(value)
 
         // Only the normal key should be present, unsupported type should be skipped
         XCTAssertEqual(result.count, 1, "Should have 1 entry")
@@ -972,83 +972,127 @@ final class DevCycleProviderTests: XCTestCase {
         XCTAssertNil(result["unsupportedKey"], "Unsupported types should be skipped")
     }
 
-    func testConvertValueToDictionaryWithEmptyStructure() {
+    func testConvertValueToDictionaryWithEmptyStructure() throws {
         // Test with empty structure
         let value = Value.structure([:])
 
-        let result = DevCycleProvider.convertValueToDictionary(value)
+        let result = try DevCycleProvider.convertValueToDictionary(value)
 
         // Verify result is empty
         XCTAssertTrue(result.isEmpty, "Result should be empty")
     }
 
-    func testConvertValueToDictionaryWithNonStructureValue() {
-        // Test with non-structure Value types
+    func testConvertValueToDictionaryWithNonStructureValueThrows() {
+        // Test with non-structure Value types - should now throw errors
         let stringValue = Value.string("just a string")
         let boolValue = Value.boolean(true)
         let doubleValue = Value.double(123.45)
         let intValue = Value.integer(42)
+        let listValue = Value.list([.string("item1"), .string("item2")])
+        let nullValue = Value.null
+        let dateValue = Value.date(Date())
 
-        // All should convert to empty dictionaries since they're not structures
-        XCTAssertTrue(DevCycleProvider.convertValueToDictionary(stringValue).isEmpty)
-        XCTAssertTrue(DevCycleProvider.convertValueToDictionary(boolValue).isEmpty)
-        XCTAssertTrue(DevCycleProvider.convertValueToDictionary(doubleValue).isEmpty)
-        XCTAssertTrue(DevCycleProvider.convertValueToDictionary(intValue).isEmpty)
+        // All should throw parse errors since they're not structures
+        XCTAssertThrowsError(try DevCycleProvider.convertValueToDictionary(stringValue)) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+            if case .parseError(let message) = error as? OpenFeatureError {
+                XCTAssertEqual(
+                    message,
+                    "DevCycle only supports object values for JSON flags. Received non-object value: \(stringValue)"
+                )
+            }
+        }
+
+        XCTAssertThrowsError(try DevCycleProvider.convertValueToDictionary(boolValue)) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
+
+        XCTAssertThrowsError(try DevCycleProvider.convertValueToDictionary(doubleValue)) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
+
+        XCTAssertThrowsError(try DevCycleProvider.convertValueToDictionary(intValue)) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
+
+        XCTAssertThrowsError(try DevCycleProvider.convertValueToDictionary(listValue)) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
+
+        XCTAssertThrowsError(try DevCycleProvider.convertValueToDictionary(nullValue)) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
+
+        XCTAssertThrowsError(try DevCycleProvider.convertValueToDictionary(dateValue)) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
     }
 
     // MARK: - JSON Flag Limitations Tests
 
-    func testGetObjectEvaluationWithNonStructureValuesReturnsDefault() throws {
+    func testGetObjectEvaluationWithNonStructureValuesThrows() throws {
         mockClient.shouldDefault = false
 
         // .list
         let listDefault = Value.list([.string("array")])
-        let listResult = try provider.getObjectEvaluation(
-            key: "json-flag-list", defaultValue: listDefault, context: nil)
-        XCTAssertEqual(listResult.value, .structure([:]))
-        XCTAssertEqual(listResult.reason, "TARGETING_MATCH")
-        XCTAssertEqual(listResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
+        XCTAssertThrowsError(
+            try provider.getObjectEvaluation(
+                key: "json-flag-list", defaultValue: listDefault, context: nil)
+        ) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+            if case .parseError(let message) = error as? OpenFeatureError {
+                XCTAssertEqual(
+                    message,
+                    "DevCycle only supports object values for JSON flags. Received non-object value: \(listDefault)"
+                )
+            }
+        }
 
         // .double
         let doubleDefault = Value.double(610)
-        let doubleResult = try provider.getObjectEvaluation(
-            key: "json-flag-double", defaultValue: doubleDefault, context: nil)
-        XCTAssertEqual(doubleResult.value, .structure([:]))
-        XCTAssertEqual(doubleResult.reason, "TARGETING_MATCH")
-        XCTAssertEqual(doubleResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
+        XCTAssertThrowsError(
+            try provider.getObjectEvaluation(
+                key: "json-flag-double", defaultValue: doubleDefault, context: nil)
+        ) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
 
         // .boolean
         let boolDefault = Value.boolean(false)
-        let boolResult = try provider.getObjectEvaluation(
-            key: "json-flag-bool", defaultValue: boolDefault, context: nil)
-        XCTAssertEqual(boolResult.value, .structure([:]))
-        XCTAssertEqual(boolResult.reason, "TARGETING_MATCH")
-        XCTAssertEqual(boolResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
+        XCTAssertThrowsError(
+            try provider.getObjectEvaluation(
+                key: "json-flag-bool", defaultValue: boolDefault, context: nil)
+        ) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
 
         // .string
         let stringDefault = Value.string("string")
-        let stringResult = try provider.getObjectEvaluation(
-            key: "json-flag-string", defaultValue: stringDefault, context: nil)
-        XCTAssertEqual(stringResult.value, .structure([:]))
-        XCTAssertEqual(stringResult.reason, "TARGETING_MATCH")
-        XCTAssertEqual(stringResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
+        XCTAssertThrowsError(
+            try provider.getObjectEvaluation(
+                key: "json-flag-string", defaultValue: stringDefault, context: nil)
+        ) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
 
         // .null
         let nullDefault = Value.null
-        let nullResult = try provider.getObjectEvaluation(
-            key: "json-flag-null", defaultValue: nullDefault, context: nil)
-        XCTAssertEqual(nullResult.value, .structure([:]))
-        XCTAssertEqual(nullResult.reason, "TARGETING_MATCH")
-        XCTAssertEqual(stringResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
+        XCTAssertThrowsError(
+            try provider.getObjectEvaluation(
+                key: "json-flag-null", defaultValue: nullDefault, context: nil)
+        ) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
 
         // .date
         let date = Date()
         let dateDefault = Value.date(date)
-        let dateResult = try provider.getObjectEvaluation(
-            key: "json-flag-date", defaultValue: dateDefault, context: nil)
-        XCTAssertEqual(dateResult.value, .structure([:]))
-        XCTAssertEqual(dateResult.reason, "TARGETING_MATCH")
-        XCTAssertEqual(stringResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
+        XCTAssertThrowsError(
+            try provider.getObjectEvaluation(
+                key: "json-flag-date", defaultValue: dateDefault, context: nil)
+        ) { error in
+            XCTAssertTrue(error is OpenFeatureError)
+        }
     }
 
     func testGetObjectEvaluationWithStructureValueIsAccepted() throws {
@@ -1059,6 +1103,8 @@ final class DevCycleProviderTests: XCTestCase {
             key: "json-flag-structure", defaultValue: structureDefault, context: nil)
         XCTAssertEqual(structureResult.value, structureDefault)
         XCTAssertEqual(structureResult.reason, "TARGETING_MATCH")
-        XCTAssertEqual(structureResult.flagMetadata, ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
+        XCTAssertEqual(
+            structureResult.flagMetadata,
+            ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
     }
 }
