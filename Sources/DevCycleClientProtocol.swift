@@ -4,6 +4,7 @@ import Foundation
 // Protocol for DevCycleClient used for dependency injection and testing.
 // Only includes the subset of methods needed by DevCycleProvider.
 public protocol DevCycleClientProtocol: AnyObject {
+    func hasUsableCachedConfig() -> Bool
     func variableValue(key: String, defaultValue: Bool) -> Bool
     func variableValue(key: String, defaultValue: String) -> String
     func variableValue(key: String, defaultValue: NSString) -> NSString
@@ -19,6 +20,7 @@ public protocol DevCycleClientProtocol: AnyObject {
     func variable(key: String, defaultValue: NSNumber) -> DVCVariable<NSNumber>
     func variable(key: String, defaultValue: [String: Any]) -> DVCVariable<[String: Any]>
     func variable(key: String, defaultValue: NSDictionary) -> DVCVariable<NSDictionary>
+    func onConfigUpdated(_ callback: @escaping (Error?) -> Void)
     func identifyUser(user: DevCycleUser, callback: ((Error?, [String: Variable]?) -> Void)?) throws
     func resetUser(callback: ((Error?, [String: Variable]?) -> Void)?) throws
     func allFeatures() -> [String: Feature]
@@ -26,6 +28,14 @@ public protocol DevCycleClientProtocol: AnyObject {
     func track(_ event: DevCycleEvent)
     func flushEvents(callback: ((Error?) -> Void)?)
     func close(callback: (() -> Void)?)
+}
+
+public extension DevCycleClientProtocol {
+    // No-op default so external conformers are not broken by the addition of this method.
+    func onConfigUpdated(_ callback: @escaping (Error?) -> Void) {}
+
+    // Default for external conformers that do not implement cache-origin tracking.
+    func hasUsableCachedConfig() -> Bool { false }
 }
 
 // Make DevCycleClient conform to the protocol

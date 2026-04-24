@@ -26,13 +26,33 @@ class MockDevCycleClient: DevCycleClientProtocol {
     var mockVariableValue: [String: Any] = [:]
     var mockIsDefaulted: Bool = true
     var shouldDefault: Bool = true
+    var hasUsableCachedConfigValue: Bool = false
+    var capturedConfigUpdatedCallback: ((Error?) -> Void)?
 
     private func makeMockVariable<T>(key: String, defaultValue: T) -> DVCVariable<T> {
-        let value: T? = shouldDefault ? nil : defaultValue
-        
-        // Requires DevCycle 1.24.2
-        let evalReason = shouldDefault ? nil : EvalReason.createOFEvalReason(reason: "TARGETING_MATCH")
+        let value: T?
+        if shouldDefault {
+            value = nil
+        } else {
+            value = (mockVariableValue[key] as? T) ?? defaultValue
+        }
+
+        let evalReason: EvalReason?
+        if shouldDefault {
+            evalReason = nil
+        } else if hasUsableCachedConfigValue {
+            // Use reason="CACHED" so getEvalReason can detect cache origin against the current
+            // published sdk (which lacks EvalReason.source). Once ios-client-sdk PR #261 ships,
+            // the sdk itself sets source="CACHED" and this mock can revert to TARGETING_MATCH.
+            evalReason = EvalReason.createOFEvalReason(reason: "CACHED")
+        } else {
+            evalReason = EvalReason.createOFEvalReason(reason: "TARGETING_MATCH")
+        }
         return DVCVariable(key: key, value: value, defaultValue: defaultValue, eval: evalReason)
+    }
+
+    func hasUsableCachedConfig() -> Bool {
+        hasUsableCachedConfigValue
     }
 
     func variableValue(key: String, defaultValue: Bool) -> Bool { defaultValue }
@@ -65,6 +85,9 @@ class MockDevCycleClient: DevCycleClientProtocol {
     }
     func variable(key: String, defaultValue: NSDictionary) -> DVCVariable<NSDictionary> {
         makeMockVariable(key: key, defaultValue: defaultValue)
+    }
+    func onConfigUpdated(_ callback: @escaping (Error?) -> Void) {
+        capturedConfigUpdatedCallback = callback
     }
     func identifyUser(user: DevCycleUser, callback: ((Error?, [String: Variable]?) -> Void)?) throws
     {

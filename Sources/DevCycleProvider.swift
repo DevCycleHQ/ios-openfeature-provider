@@ -8,11 +8,24 @@ import DevCycle
 import Foundation
 import OpenFeature
 
+// Shim: EvalReason.source is added in ios-client-sdk PR #261. Until that ships this computed
+// property lets the provider compile unmodified. Remove once the sdk dependency is bumped.
+extension EvalReason {
+    var source: String? { nil }
+}
+
 public struct DevCycleProviderMetadata: ProviderMetadata {
     public var name: String? = "DevCycle Provider"
 }
 
 public final class DevCycleProvider: FeatureProvider {
+    internal typealias DevCycleClientFactory = (
+        _ sdkKey: String,
+        _ user: DevCycleUser,
+        _ options: DevCycleOptions?,
+        _ onInitialized: @escaping ClientInitializedHandler
+    ) throws -> DevCycleClientProtocol
+
     /**
         Provider hooks
      */
@@ -42,6 +55,8 @@ public final class DevCycleProvider: FeatureProvider {
         Event handler for provider events
      */
     private let eventHandler = EventHandler()
+
+    internal var clientFactory: DevCycleClientFactory = DevCycleProvider.makeClient
 
     // MARK: - FeatureProvider Methods
 
@@ -87,11 +102,11 @@ public final class DevCycleProvider: FeatureProvider {
             try await initializeDevCycleClient(with: user)
 
             // Report provider ready
-            eventHandler.send(.ready)
+            eventHandler.send(.ready())
         } catch {
             // Report provider error
             eventHandler.send(
-                ProviderEvent.error(errorCode: .providerNotReady, message: "Initialization error"))
+                .error(ProviderEventDetails(message: "Initialization error", errorCode: .providerNotReady)))
             throw OpenFeatureError.providerFatalError(
                 message: "DevCycle client initialization error: \(error)")
         }
@@ -123,7 +138,7 @@ public final class DevCycleProvider: FeatureProvider {
             let user = try DevCycleProvider.dvcUserFromContext(newContext)
 
             // Mark provider as stale while context is being updated
-            eventHandler.send(.stale)
+            eventHandler.send(.stale())
 
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<Void, Error>) in
@@ -132,12 +147,11 @@ public final class DevCycleProvider: FeatureProvider {
                         if let error = error {
                             print("DevCycle identify user error: \(error)")
                             self.eventHandler.send(
-                                ProviderEvent.error(
-                                    errorCode: .general, message: "User identification error"))
+                                .error(ProviderEventDetails(message: "User identification error", errorCode: .general)))
                             continuation.resume(throwing: error)
                         } else {
                             // Once user is identified, the context has been updated
-                            self.eventHandler.send(.configurationChanged)
+                            self.eventHandler.send(.configurationChanged())
                             continuation.resume()
                         }
                     }
@@ -148,7 +162,7 @@ public final class DevCycleProvider: FeatureProvider {
         } catch {
             Log.error("DevCycleProvider onContextSet error: \(error)")
             eventHandler.send(
-                ProviderEvent.error(errorCode: .general, message: "Context set error"))
+                .error(ProviderEventDetails(message: "Context set error", errorCode: .general)))
             throw OpenFeatureError.generalError(message: "Error setting context: \(error)")
         }
     }
@@ -314,26 +328,69 @@ public final class DevCycleProvider: FeatureProvider {
     internal func initializeDevCycleClient(with user: DevCycleUser) async throws {
         try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<Void, Error>) in
-            do {
-                self.devcycleClient = try DevCycleClient.builder()
-                    .sdkKey(sdkKey)
-                    .user(user)
-                    .options(options ?? DevCycleOptions.builder().build())
-                    .build { error in
-                        if let error = error {
-                            continuation.resume(
-                                throwing: OpenFeatureError.providerFatalError(
-                                    message: "DevCycle client initialization error: \(error)"))
-                        } else {
-                            continuation.resume()
-                        }
-                    }
+            let resumeLock = NSLock()
+            var didResume = false
 
-                // TODO: add support for `ConfigurationChanged` and `Error` events to OF
+            func resumeOnce(with result: Result<Void, Error>) {
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+                guard !didResume else { return }
+                didResume = true
+                switch result {
+                case .success: continuation.resume()
+                case .failure(let error): continuation.resume(throwing: error)
+                }
+            }
+
+            do {
+                let client = try clientFactory(sdkKey, user, options) { error in
+                    if let error = error {
+                        resumeOnce(
+                            with: .failure(
+                                OpenFeatureError.providerFatalError(
+                                    message: "DevCycle client initialization error: \(error)"
+                                )))
+                    } else {
+                        resumeOnce(with: .success(()))
+                    }
+                }
+
+                // Transient errors do not fire this callback — cache is silently kept.
+                client.onConfigUpdated { [weak self] (error: Error?) in
+                    guard let self = self else { return }
+                    if let error = error {
+                        self.eventHandler.send(
+                            .error(ProviderEventDetails(
+                                message: "Background refresh error: \(error.localizedDescription)",
+                                errorCode: .providerFatal)))
+                    } else {
+                        self.eventHandler.send(.configurationChanged())
+                    }
+                }
+
+                // onInitialized will also fire asynchronously on cache hit but resumeOnce ignores it.
+                if client.hasUsableCachedConfig() {
+                    resumeOnce(with: .success(()))
+                }
+
+                self.devcycleClient = client
             } catch {
-                continuation.resume(throwing: error)
+                resumeOnce(with: .failure(error))
             }
         }
+    }
+
+    private static func makeClient(
+        sdkKey: String,
+        user: DevCycleUser,
+        options: DevCycleOptions?,
+        onInitialized: @escaping ClientInitializedHandler
+    ) throws -> DevCycleClientProtocol {
+        try DevCycleClient.builder()
+            .sdkKey(sdkKey)
+            .user(user)
+            .options(options ?? DevCycleOptions.builder().build())
+            .build(onInitialized: onInitialized)
     }
 
     /**
@@ -553,6 +610,9 @@ public final class DevCycleProvider: FeatureProvider {
     }
 
     internal static func getEvalReason<T>(variable: DVCVariable<T>) -> String {
+        // source is set by the sdk when serving from cache (PR #261); reason fallback supports
+        // tests running against the current published sdk before that lands.
+        if variable.eval?.source == "CACHED" || variable.eval?.reason == "CACHED" { return "CACHED" }
         if let evalReason = variable.eval {
             return evalReason.reason
         }
