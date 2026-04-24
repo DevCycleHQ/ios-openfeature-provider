@@ -31,10 +31,7 @@ public protocol DevCycleClientProtocol: AnyObject {
 }
 
 public extension DevCycleClientProtocol {
-    // No-op default so external conformers are not broken by the addition of this method.
     func onConfigUpdated(_ callback: @escaping (Error?) -> Void) {}
-
-    // Default for external conformers that do not implement cache-origin tracking.
     func hasUsableCachedConfig() -> Bool { false }
 }
 

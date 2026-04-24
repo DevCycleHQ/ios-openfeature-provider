@@ -244,6 +244,68 @@ final class DevCycleProviderTests: XCTestCase {
         XCTAssertEqual(observedEvents, [.ready])
     }
 
+    // Per ADR 0009 the provider must keep serving cached values after a background-refresh
+    // auth error. .providerFatal moves the OF client to .fatal status and stops evaluation,
+    // so the emitted error code must be a recoverable one.
+    func testProviderStaysUsableAfterBackgroundRefreshError() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let cachedClient = MockDevCycleClient()
+        cachedClient.hasUsableCachedConfigValue = true
+        cachedClient.shouldDefault = false
+        cachedClient.mockVariableValue["cached-flag"] = "cached-value"
+
+        testProvider.clientFactory = { _, _, _, _ in cachedClient }
+
+        var receivedErrorDetails: ProviderEventDetails?
+        let errorEventReceived = expectation(description: "error event received")
+        let cancellable = testProvider.observe().sink { event in
+            if case .error(let details) = event {
+                receivedErrorDetails = details
+                errorEventReceived.fulfill()
+            }
+        }
+        defer { cancellable.cancel() }
+
+        try await testProvider.initialize(initialContext: MutableContext(targetingKey: "cached-user"))
+
+        XCTAssertNotNil(cachedClient.capturedConfigUpdatedCallback)
+        cachedClient.capturedConfigUpdatedCallback?(NSError(domain: "test", code: 401))
+
+        await fulfillment(of: [errorEventReceived], timeout: 1.0)
+        XCTAssertEqual(receivedErrorDetails?.errorCode, .general)
+        XCTAssertNotEqual(receivedErrorDetails?.errorCode, .providerFatal)
+
+        let result = try testProvider.getStringEvaluation(
+            key: "cached-flag",
+            defaultValue: "default",
+            context: nil as EvaluationContext?
+        )
+        XCTAssertEqual(result.value, "cached-value")
+        XCTAssertEqual(result.reason, "CACHED")
+    }
+
+    // Stricter ordering test: no Task wrapping, no expectation hops between initialize() returning
+    // and the first evaluation. devcycleClient must be assigned before the cache-hit resume fires.
+    func testEvaluateImmediatelyAfterCachedInitialize() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let cachedClient = MockDevCycleClient()
+        cachedClient.hasUsableCachedConfigValue = true
+        cachedClient.shouldDefault = false
+        cachedClient.mockVariableValue["sync-flag"] = "cached-value"
+
+        testProvider.clientFactory = { _, _, _, _ in cachedClient }
+
+        try await testProvider.initialize(initialContext: MutableContext(targetingKey: "sync-user"))
+
+        let result = try testProvider.getStringEvaluation(
+            key: "sync-flag",
+            defaultValue: "default",
+            context: nil as EvaluationContext?
+        )
+        XCTAssertEqual(result.value, "cached-value", "devcycleClient must be set before initialize() returns")
+        XCTAssertEqual(result.reason, "CACHED")
+    }
+
     // MARK: - Event Observation Tests
 
     func testObserve() {

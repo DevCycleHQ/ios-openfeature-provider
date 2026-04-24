@@ -8,12 +8,6 @@ import DevCycle
 import Foundation
 import OpenFeature
 
-// Shim: EvalReason.source is added in ios-client-sdk PR #261. Until that ships this computed
-// property lets the provider compile unmodified. Remove once the sdk dependency is bumped.
-extension EvalReason {
-    var source: String? { nil }
-}
-
 public struct DevCycleProviderMetadata: ProviderMetadata {
     public var name: String? = "DevCycle Provider"
 }
@@ -354,26 +348,23 @@ public final class DevCycleProvider: FeatureProvider {
                         resumeOnce(with: .success(()))
                     }
                 }
+                self.devcycleClient = client
 
-                // Transient errors do not fire this callback — cache is silently kept.
                 client.onConfigUpdated { [weak self] (error: Error?) in
                     guard let self = self else { return }
                     if let error = error {
                         self.eventHandler.send(
                             .error(ProviderEventDetails(
                                 message: "Background refresh error: \(error.localizedDescription)",
-                                errorCode: .providerFatal)))
+                                errorCode: .general)))
                     } else {
                         self.eventHandler.send(.configurationChanged())
                     }
                 }
 
-                // onInitialized will also fire asynchronously on cache hit but resumeOnce ignores it.
                 if client.hasUsableCachedConfig() {
                     resumeOnce(with: .success(()))
                 }
-
-                self.devcycleClient = client
             } catch {
                 resumeOnce(with: .failure(error))
             }
@@ -610,9 +601,7 @@ public final class DevCycleProvider: FeatureProvider {
     }
 
     internal static func getEvalReason<T>(variable: DVCVariable<T>) -> String {
-        // source is set by the sdk when serving from cache (PR #261); reason fallback supports
-        // tests running against the current published sdk before that lands.
-        if variable.eval?.source == "CACHED" || variable.eval?.reason == "CACHED" { return "CACHED" }
+        if variable.eval?.source == "CACHED" { return "CACHED" }
         if let evalReason = variable.eval {
             return evalReason.reason
         }

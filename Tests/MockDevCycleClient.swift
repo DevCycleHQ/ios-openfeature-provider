@@ -41,10 +41,7 @@ class MockDevCycleClient: DevCycleClientProtocol {
         if shouldDefault {
             evalReason = nil
         } else if hasUsableCachedConfigValue {
-            // Use reason="CACHED" so getEvalReason can detect cache origin against the current
-            // published sdk (which lacks EvalReason.source). Once ios-client-sdk PR #261 ships,
-            // the sdk itself sets source="CACHED" and this mock can revert to TARGETING_MATCH.
-            evalReason = EvalReason.createOFEvalReason(reason: "CACHED")
+            evalReason = EvalReason.createOFEvalReason(reason: "TARGETING_MATCH").withSource("CACHED")
         } else {
             evalReason = EvalReason.createOFEvalReason(reason: "TARGETING_MATCH")
         }
