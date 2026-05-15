@@ -37,14 +37,9 @@ class MockDevCycleClient: DevCycleClientProtocol {
             value = (mockVariableValue[key] as? T) ?? defaultValue
         }
 
-        let evalReason: EvalReason?
-        if shouldDefault {
-            evalReason = nil
-        } else if hasUsableCachedConfigValue {
-            evalReason = EvalReason.createOFEvalReason(reason: "TARGETING_MATCH").withSource("CACHED")
-        } else {
-            evalReason = EvalReason.createOFEvalReason(reason: "TARGETING_MATCH")
-        }
+        let evalReason: EvalReason? = shouldDefault
+            ? nil
+            : EvalReason.createOFEvalReason(reason: "TARGETING_MATCH")
         return DVCVariable(key: key, value: value, defaultValue: defaultValue, eval: evalReason)
     }
 

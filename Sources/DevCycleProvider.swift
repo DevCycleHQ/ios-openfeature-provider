@@ -187,7 +187,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: variable.value,
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
         )
     }
 
@@ -216,7 +216,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: variable.value,
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
         )
     }
 
@@ -248,7 +248,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: Int64(variable.value),
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
         )
     }
 
@@ -277,7 +277,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: variable.value,
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
         )
     }
 
@@ -309,7 +309,7 @@ public final class DevCycleProvider: FeatureProvider {
             value: variable.isDefaulted
                 ? defaultValue : DevCycleProvider.convertDictionaryToValue(variable.value),
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
         )
     }
 
@@ -600,8 +600,8 @@ public final class DevCycleProvider: FeatureProvider {
         return customData
     }
 
-    internal static func getEvalReason<T>(variable: DVCVariable<T>) -> String {
-        if variable.eval?.source == "CACHED" { return "CACHED" }
+    internal static func getEvalReason<T>(variable: DVCVariable<T>, isCached: Bool = false) -> String {
+        if isCached && !variable.isDefaulted { return "CACHED" }
         if let evalReason = variable.eval {
             return evalReason.reason
         }
