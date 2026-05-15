@@ -121,13 +121,16 @@ final class DevCycleProviderTests: XCTestCase {
         }
 
         let initializeCompleted = expectation(description: "initialize completes after callback")
-        let initializeShouldWait = expectation(description: "initialize should wait for callback")
-        initializeShouldWait.isInverted = true
+        // Inverted: if initialize() completes within 0.2s it fulfills this, failing the test.
+        let initializeShouldNotCompleteEarly = expectation(
+            description: "initialize should not complete before callback fires")
+        initializeShouldNotCompleteEarly.isInverted = true
 
         Task {
             do {
                 try await testProvider.initialize(
                     initialContext: MutableContext(targetingKey: "uncached-user"))
+                initializeShouldNotCompleteEarly.fulfill()
                 initializeCompleted.fulfill()
             } catch {
                 XCTFail("initialize should not throw when callback succeeds: \(error)")
@@ -135,7 +138,7 @@ final class DevCycleProviderTests: XCTestCase {
         }
 
         // Initialization should remain pending until the callback resolves
-        await fulfillment(of: [initializeShouldWait], timeout: 0.2)
+        await fulfillment(of: [initializeShouldNotCompleteEarly], timeout: 0.2)
         XCTAssertNotNil(initializationCallback)
 
         initializationCallback?(nil)
@@ -212,8 +215,10 @@ final class DevCycleProviderTests: XCTestCase {
 
         let readyEventReceived = expectation(description: "ready event received")
         let initializeCompleted = expectation(description: "initialize completed after callback")
-        let initializeShouldWait = expectation(description: "initialize should wait for callback")
-        initializeShouldWait.isInverted = true
+        // Inverted: if initialize() completes within 0.2s it fulfills this, failing the test.
+        let initializeShouldNotCompleteEarly = expectation(
+            description: "initialize should not complete before callback fires")
+        initializeShouldNotCompleteEarly.isInverted = true
 
         var observedEvents: [ObservedProviderEvent] = []
         let cancellable = testProvider.observe().sink { event in
@@ -227,6 +232,7 @@ final class DevCycleProviderTests: XCTestCase {
             do {
                 try await testProvider.initialize(
                     initialContext: MutableContext(targetingKey: "uncached-user"))
+                initializeShouldNotCompleteEarly.fulfill()
                 initializeCompleted.fulfill()
             } catch {
                 XCTFail("initialize should not throw when callback succeeds: \(error)")
@@ -234,7 +240,7 @@ final class DevCycleProviderTests: XCTestCase {
         }
 
         // Initialization should remain pending until the callback resolves
-        await fulfillment(of: [initializeShouldWait], timeout: 0.2)
+        await fulfillment(of: [initializeShouldNotCompleteEarly], timeout: 0.2)
         XCTAssertNotNil(initializationCallback)
 
         // Complete initialization and verify the provider emits ready
