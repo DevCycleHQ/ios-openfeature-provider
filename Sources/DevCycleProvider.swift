@@ -52,6 +52,10 @@ public final class DevCycleProvider: FeatureProvider {
 
     internal var clientFactory: DevCycleClientFactory = DevCycleProvider.makeClient
 
+    private var isServingCachedConfig: Bool {
+        devcycleClient?.hasUsableCachedConfig() ?? false
+    }
+
     // MARK: - FeatureProvider Methods
 
     /**
@@ -139,7 +143,7 @@ public final class DevCycleProvider: FeatureProvider {
                 do {
                     try client.identifyUser(user: user) { error, _ in
                         if let error = error {
-                            print("DevCycle identify user error: \(error)")
+                            Log.error("DevCycle identify user error: \(error)")
                             self.eventHandler.send(
                                 .error(ProviderEventDetails(message: "User identification error", errorCode: .general)))
                             continuation.resume(throwing: error)
@@ -187,7 +191,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: variable.value,
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: isServingCachedConfig)
         )
     }
 
@@ -216,7 +220,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: variable.value,
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: isServingCachedConfig)
         )
     }
 
@@ -248,7 +252,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: Int64(variable.value),
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: isServingCachedConfig)
         )
     }
 
@@ -277,7 +281,7 @@ public final class DevCycleProvider: FeatureProvider {
         return ProviderEvaluation(
             value: variable.value,
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: isServingCachedConfig)
         )
     }
 
@@ -309,7 +313,7 @@ public final class DevCycleProvider: FeatureProvider {
             value: variable.isDefaulted
                 ? defaultValue : DevCycleProvider.convertDictionaryToValue(variable.value),
             flagMetadata: DevCycleProvider.getFlagMetadata(variable: variable),
-            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: devcycleClient?.hasUsableCachedConfig() ?? false)
+            reason: DevCycleProvider.getEvalReason(variable: variable, isCached: isServingCachedConfig)
         )
     }
 

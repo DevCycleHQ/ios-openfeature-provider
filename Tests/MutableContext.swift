@@ -23,48 +23,34 @@ final class MutableContext: EvaluationContext {
     }
 
     func getTargetingKey() -> String {
-        queue.sync {
-            targetingKey
-        }
+        queue.sync { targetingKey }
     }
 
     func keySet() -> Set<String> {
-        queue.sync {
-            structure.keySet()
-        }
+        queue.sync { structure.keySet() }
     }
 
     func getValue(key: String) -> Value? {
-        queue.sync {
-            structure.getValue(key: key)
-        }
+        queue.sync { structure.getValue(key: key) }
     }
 
     func asMap() -> [String: Value] {
-        queue.sync {
-            structure.asMap()
-        }
+        queue.sync { structure.asMap() }
     }
 
     func asObjectMap() -> [String: AnyHashable?] {
-        queue.sync {
-            structure.asObjectMap()
-        }
+        queue.sync { structure.asObjectMap() }
     }
 
     func setTargetingKey(targetingKey: String) {
-        queue.sync {
-            self.targetingKey = targetingKey
-        }
+        queue.sync { self.targetingKey = targetingKey }
     }
 }
 
 extension MutableContext {
     @discardableResult
     func add(key: String, value: Value) -> MutableContext {
-        _ = queue.sync {
-            structure.add(key: key, value: value)
-        }
+        queue.sync { structure.add(key: key, value: value) }
         return self
     }
 }

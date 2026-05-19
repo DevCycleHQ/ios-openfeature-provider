@@ -192,8 +192,8 @@ final class DevCycleProviderTests: XCTestCase {
 
         try await testProvider.initialize(initialContext: MutableContext(targetingKey: "cached-user"))
 
-        // Simulate background refresh success via onConfigUpdated — this is what the real client
-        // calls after performBackgroundRefresh completes, not the onInitialized callback.
+        // Simulate background refresh success — the SDK calls onConfigUpdated after the
+        // background network fetch completes, independently of the onInitialized callback.
         XCTAssertNotNil(cachedClient.capturedConfigUpdatedCallback)
         cachedClient.capturedConfigUpdatedCallback?(nil)
 
