@@ -6,6 +6,12 @@ import XCTest
 @testable import DevCycleOpenFeatureProvider
 
 final class DevCycleProviderTests: XCTestCase {
+    private enum ObservedProviderEvent: Equatable {
+        case ready
+        case stale
+        case configurationChanged
+        case error
+    }
 
     private var sdkKey: String!
     private var provider: DevCycleProvider!
@@ -64,6 +70,246 @@ final class DevCycleProviderTests: XCTestCase {
         // We won't actually initialize since it would make real API calls
         let testProvider = DevCycleProvider(sdkKey: sdkKey)
         XCTAssertNotNil(testProvider)
+    }
+
+    func testInitializeReturnsWhenCachedConfigIsAvailable() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let cachedClient = MockDevCycleClient()
+        cachedClient.hasUsableCachedConfigValue = true
+        cachedClient.shouldDefault = false
+        cachedClient.mockVariableValue["cached-flag"] = "cached-value"
+
+        // Inject a client that already has usable cached config
+        testProvider.clientFactory = { _, _, _, _ in
+            cachedClient
+        }
+
+        let initializeCompleted = expectation(description: "initialize completes from cached config")
+
+        Task {
+            do {
+                try await testProvider.initialize(
+                    initialContext: MutableContext(targetingKey: "cached-user"))
+                initializeCompleted.fulfill()
+            } catch {
+                XCTFail("initialize should not throw when cached config is available: \(error)")
+            }
+        }
+
+        await fulfillment(of: [initializeCompleted], timeout: 1.0)
+
+        // Cached startup should allow immediate flag evaluation
+        let result = try testProvider.getStringEvaluation(
+            key: "cached-flag",
+            defaultValue: "default",
+            context: nil as EvaluationContext?
+        )
+        XCTAssertEqual(result.value, "cached-value")
+        XCTAssertEqual(result.reason, "CACHED")
+    }
+
+    func testInitializeWaitsWhenCachedConfigIsUnavailable() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let uncachedClient = MockDevCycleClient()
+        uncachedClient.hasUsableCachedConfigValue = false
+        var initializationCallback: ClientInitializedHandler?
+
+        // Capture the async initialization callback for the uncached path
+        testProvider.clientFactory = { _, _, _, onInitialized in
+            initializationCallback = onInitialized
+            return uncachedClient
+        }
+
+        let initializeCompleted = expectation(description: "initialize completes after callback")
+        // Inverted: if initialize() completes within 0.2s it fulfills this, failing the test.
+        let initializeShouldNotCompleteEarly = expectation(
+            description: "initialize should not complete before callback fires")
+        initializeShouldNotCompleteEarly.isInverted = true
+
+        Task {
+            do {
+                try await testProvider.initialize(
+                    initialContext: MutableContext(targetingKey: "uncached-user"))
+                initializeShouldNotCompleteEarly.fulfill()
+                initializeCompleted.fulfill()
+            } catch {
+                XCTFail("initialize should not throw when callback succeeds: \(error)")
+            }
+        }
+
+        // Initialization should remain pending until the callback resolves
+        await fulfillment(of: [initializeShouldNotCompleteEarly], timeout: 0.2)
+        XCTAssertNotNil(initializationCallback)
+
+        initializationCallback?(nil)
+
+        await fulfillment(of: [initializeCompleted], timeout: 1.0)
+    }
+
+    func testInitializeEmitsReadyWhenCachedConfigIsAvailable() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let cachedClient = MockDevCycleClient()
+        cachedClient.hasUsableCachedConfigValue = true
+
+        testProvider.clientFactory = { _, _, _, _ in
+            cachedClient
+        }
+
+        let readyEventReceived = expectation(description: "ready event received")
+        var observedEvents: [ObservedProviderEvent] = []
+        let cancellable = testProvider.observe().sink { event in
+            guard let observedEvent = self.observedProviderEvent(for: event) else { return }
+            observedEvents.append(observedEvent)
+            readyEventReceived.fulfill()
+        }
+        defer { cancellable.cancel() }
+
+        try await testProvider.initialize(initialContext: MutableContext(targetingKey: "cached-user"))
+
+        await fulfillment(of: [readyEventReceived], timeout: 1.0)
+        XCTAssertEqual(observedEvents.first, .ready)
+    }
+
+    func testInitializeEmitsConfigurationChangedAfterCachedRefreshSucceeds() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let cachedClient = MockDevCycleClient()
+        cachedClient.hasUsableCachedConfigValue = true
+
+        testProvider.clientFactory = { _, _, _, _ in
+            cachedClient
+        }
+
+        let providerEventsReceived = expectation(
+            description: "ready and configurationChanged events received")
+        providerEventsReceived.expectedFulfillmentCount = 2
+        var observedEvents: [ObservedProviderEvent] = []
+        let cancellable = testProvider.observe().sink { event in
+            guard let observedEvent = self.observedProviderEvent(for: event) else { return }
+            observedEvents.append(observedEvent)
+            providerEventsReceived.fulfill()
+        }
+        defer { cancellable.cancel() }
+
+        try await testProvider.initialize(initialContext: MutableContext(targetingKey: "cached-user"))
+
+        // Simulate background refresh success — the SDK calls onConfigUpdated after the
+        // background network fetch completes, independently of the onInitialized callback.
+        XCTAssertNotNil(cachedClient.capturedConfigUpdatedCallback)
+        cachedClient.capturedConfigUpdatedCallback?(nil)
+
+        await fulfillment(of: [providerEventsReceived], timeout: 1.0)
+        XCTAssertEqual(observedEvents, [.ready, .configurationChanged])
+    }
+
+    func testInitializeEmitsReadyWhenCachedConfigIsUnavailable() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let uncachedClient = MockDevCycleClient()
+        uncachedClient.hasUsableCachedConfigValue = false
+        var initializationCallback: ClientInitializedHandler?
+
+        // Capture the callback so we can resolve initialization manually
+        testProvider.clientFactory = { _, _, _, onInitialized in
+            initializationCallback = onInitialized
+            return uncachedClient
+        }
+
+        let readyEventReceived = expectation(description: "ready event received")
+        let initializeCompleted = expectation(description: "initialize completed after callback")
+        // Inverted: if initialize() completes within 0.2s it fulfills this, failing the test.
+        let initializeShouldNotCompleteEarly = expectation(
+            description: "initialize should not complete before callback fires")
+        initializeShouldNotCompleteEarly.isInverted = true
+
+        var observedEvents: [ObservedProviderEvent] = []
+        let cancellable = testProvider.observe().sink { event in
+            guard let observedEvent = self.observedProviderEvent(for: event) else { return }
+            observedEvents.append(observedEvent)
+            readyEventReceived.fulfill()
+        }
+        defer { cancellable.cancel() }
+
+        Task {
+            do {
+                try await testProvider.initialize(
+                    initialContext: MutableContext(targetingKey: "uncached-user"))
+                initializeShouldNotCompleteEarly.fulfill()
+                initializeCompleted.fulfill()
+            } catch {
+                XCTFail("initialize should not throw when callback succeeds: \(error)")
+            }
+        }
+
+        // Initialization should remain pending until the callback resolves
+        await fulfillment(of: [initializeShouldNotCompleteEarly], timeout: 0.2)
+        XCTAssertNotNil(initializationCallback)
+
+        // Complete initialization and verify the provider emits ready
+        initializationCallback?(nil)
+
+        await fulfillment(of: [readyEventReceived, initializeCompleted], timeout: 1.0)
+        XCTAssertEqual(observedEvents, [.ready])
+    }
+
+    // Per ADR 0009 the provider must keep serving cached values after a background-refresh
+    // auth error. .providerFatal moves the OF client to .fatal status and stops evaluation,
+    // so the emitted error code must be a recoverable one.
+    func testProviderStaysUsableAfterBackgroundRefreshError() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let cachedClient = MockDevCycleClient()
+        cachedClient.hasUsableCachedConfigValue = true
+        cachedClient.shouldDefault = false
+        cachedClient.mockVariableValue["cached-flag"] = "cached-value"
+
+        testProvider.clientFactory = { _, _, _, _ in cachedClient }
+
+        var receivedErrorDetails: ProviderEventDetails?
+        let errorEventReceived = expectation(description: "error event received")
+        let cancellable = testProvider.observe().sink { event in
+            if case .error(let details) = event {
+                receivedErrorDetails = details
+                errorEventReceived.fulfill()
+            }
+        }
+        defer { cancellable.cancel() }
+
+        try await testProvider.initialize(initialContext: MutableContext(targetingKey: "cached-user"))
+
+        XCTAssertNotNil(cachedClient.capturedConfigUpdatedCallback)
+        cachedClient.capturedConfigUpdatedCallback?(NSError(domain: "test", code: 401))
+
+        await fulfillment(of: [errorEventReceived], timeout: 1.0)
+        XCTAssertEqual(receivedErrorDetails?.errorCode, .general)
+        XCTAssertNotEqual(receivedErrorDetails?.errorCode, .providerFatal)
+
+        let result = try testProvider.getStringEvaluation(
+            key: "cached-flag",
+            defaultValue: "default",
+            context: nil as EvaluationContext?
+        )
+        XCTAssertEqual(result.value, "cached-value")
+        XCTAssertEqual(result.reason, "CACHED")
+    }
+
+    // Stricter ordering test: no Task wrapping, no expectation hops between initialize() returning
+    // and the first evaluation. devcycleClient must be assigned before the cache-hit resume fires.
+    func testEvaluateImmediatelyAfterCachedInitialize() async throws {
+        let testProvider = DevCycleProvider(sdkKey: sdkKey)
+        let cachedClient = MockDevCycleClient()
+        cachedClient.hasUsableCachedConfigValue = true
+        cachedClient.shouldDefault = false
+        cachedClient.mockVariableValue["sync-flag"] = "cached-value"
+
+        testProvider.clientFactory = { _, _, _, _ in cachedClient }
+
+        try await testProvider.initialize(initialContext: MutableContext(targetingKey: "sync-user"))
+
+        let result = try testProvider.getStringEvaluation(
+            key: "sync-flag",
+            defaultValue: "default",
+            context: nil as EvaluationContext?
+        )
+        XCTAssertEqual(result.value, "cached-value", "devcycleClient must be set before initialize() returns")
+        XCTAssertEqual(result.reason, "CACHED")
     }
 
     // MARK: - Event Observation Tests
@@ -1106,5 +1352,17 @@ final class DevCycleProviderTests: XCTestCase {
         XCTAssertEqual(
             structureResult.flagMetadata,
             ["evalDetails": FlagMetadataValue.of("OpenFeature Testing")])
+    }
+
+    private func observedProviderEvent(for event: OpenFeature.ProviderEvent?) -> ObservedProviderEvent?
+    {
+        guard let event else { return nil }
+        switch event {
+        case .configurationChanged: return .configurationChanged
+        case .stale: return .stale
+        case .ready: return .ready
+        case .error: return .error
+        default: return nil
+        }
     }
 }
